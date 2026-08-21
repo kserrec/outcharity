@@ -4,3 +4,7 @@ db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/webhook.test.js:stripe-access-toke
 db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/webhook.test.js:stripe-access-token:147
 db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/payments.test.js:generic-api-key:107
 db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/payments.test.js:stripe-access-token:78
+9a8b85797fc0e723ee4c8e1a1462d4ff69b57833:test/config-and-views.test.js:stripe-access-token:144
+9a8b85797fc0e723ee4c8e1a1462d4ff69b57833:test/config-and-views.test.js:stripe-access-token:237
+9a8b85797fc0e723ee4c8e1a1462d4ff69b57833:test/webhook.test.js:stripe-access-token:93
+9a8b85797fc0e723ee4c8e1a1462d4ff69b57833:test/webhook.test.js:stripe-access-token:215
