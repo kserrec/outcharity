@@ -1,0 +1,39 @@
+To: saif@thegoodapi.com
+Subject: Standalone donation API and compliance for Outcharity
+
+Hi Saif,
+
+I am building Outcharity, a U.S. website where businesses buy ranked advertising placement. The businesses that have paid the most appear highest on a public leaderboard.
+
+Our intended money flow is:
+
+- A business pays Outcharity through Stripe Checkout.
+- 90% of the gross payment is allocated to one featured charity.
+- 10% supports Outcharity.
+- Outcharity absorbs payment-processing fees; those fees never reduce the promised 90% charity amount.
+- After Stripe confirms payment by signed webhook, our server records the payment once and sends the 90% charity amount to GoodAPI's charity-donations API with an idempotency key.
+
+We would like the first featured charity to be ALSAC/St. Jude Children's Research Hospital. We would also like to use the line "Buy the top spot. Help kids with cancer," but we will not publish that line or use the charity's name, logo, or other branding until the arrangement and wording are approved in writing.
+
+Could you please answer these questions before we integrate?
+
+1. Does GoodAPI accept this exact standalone advertising model, outside Shopify?
+
+2. Does your service and governing agreement cover commercial co-venture or charitable-sales-promotion compliance across all U.S. states where it is required, including charity consent, contracts, registrations, bonds, disclosures, reporting, and campaign accounting? If coverage is narrower, please state exactly what GoodAPI handles.
+
+3. What legal, registration, reporting, disclosure, accounting, or remittance obligations would remain with Outcharity?
+
+4. Is ALSAC/St. Jude Children's Research Hospital currently eligible to receive funds through the API? Can GoodAPI obtain or confirm the written approvals needed to name the charity publicly and use the proposed line? Please provide the exact approved campaign wording and disclosure.
+
+5. What is the exact price for this standalone use case, including subscription fees, per-donation fees, payment fees, minimums, setup fees, and any other charges? We expect low transaction volume at first.
+
+6. How does the money move in practice? The API documentation describes Stripe subscription and metered billing. Please confirm what amount GoodAPI charges us, when it charges us, when the charity receives the funds, and whether the charity receives the full amount_cents we submit.
+
+7. How must refunds and chargebacks be handled? Your documentation says that refunding a donation record does not automatically reverse Stripe metered usage. Please describe the complete required process and any deadlines.
+
+8. Which agreement controls this arrangement, and can you send it for review before we enable live payments?
+
+If this model is supported, please also tell me the exact steps required to receive test and live API access.
+
+Thank you,
+Kyle

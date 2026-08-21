@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /manage/
+Disallow: /success
+Disallow: /checkout
+Disallow: /webhooks/
+Sitemap: https://outcharity.com/sitemap.xml

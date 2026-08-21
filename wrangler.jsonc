@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "outcharity",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "public"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "outcharity",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "LOGOS",
+      "bucket_name": "outcharity-logos"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
+  "vars": {
+    "OUTCHARITY_LAUNCH_APPROVED": "false",
+    "SITE_URL": "http://localhost:8787",
+    "CHARITY_NAME": "",
+    "CHARITY_URL": "",
+    "CHARITY_EIN": "",
+    "CHARITY_DISCLOSURE": "",
+    "CAMPAIGN_HEADLINE": "Buy the top spot. Help the featured charity.",
+    "CHARITY_PERCENTAGE": "90",
+    "PLATFORM_PERCENTAGE": "10",
+    "MIN_CONTRIBUTION_CENTS": "1000",
+    "MAX_CONTRIBUTION_CENTS": "100000000"
+  }
+}
