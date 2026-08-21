@@ -206,14 +206,3 @@ export async function hashToken(token) {
 export function isManagementToken(value) {
   return /^[a-f0-9]{64}$/.test(String(value || ''));
 }
-
-export function sortLeaderboard(advertisers) {
-  return [...advertisers]
-    .filter((advertiser) => !advertiser.is_hidden && advertiser.total_contributed_cents > 0)
-    .sort(
-      (left, right) =>
-        right.total_contributed_cents - left.total_contributed_cents ||
-        left.created_at.localeCompare(right.created_at) ||
-        left.id.localeCompare(right.id),
-    );
-}

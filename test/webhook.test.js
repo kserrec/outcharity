@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { app } from '../src/index.js';
+import worker, { app } from '../src/index.js';
 import { newAdvertiserMetadata } from '../src/payments.js';
 import { createStripeClient } from '../src/providers.js';
 import { TestD1Database } from './helpers/d1.js';
@@ -57,6 +57,51 @@ function signedRequestBody(checkoutSession, eventId, eventType = 'checkout.sessi
     }),
   };
 }
+
+test('the webhook route rejects a forged paid event before fulfillment', async (context) => {
+  const db = new TestD1Database();
+  const originalFetch = globalThis.fetch;
+  let donationCalls = 0;
+  context.mock.method(console, 'error', () => {});
+  globalThis.fetch = async (_url, options) => {
+    donationCalls += 1;
+    const request = JSON.parse(options.body);
+    return new Response(
+      JSON.stringify({ donation_id: 'must-not-run', amount_cents: request.amount_cents }),
+      { status: 200 },
+    );
+  };
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    db.close();
+  });
+
+  const forged = signedRequestBody(session('paid'), 'evt_forged');
+  const wrongSignature = stripe.webhooks.generateTestHeaderString({
+    payload: forged.payload,
+    secret: 'whsec_wrong_secret',
+  });
+  const response = await app.request(
+    'http://localhost/webhooks/stripe',
+    {
+      method: 'POST',
+      headers: { 'stripe-signature': wrongSignature },
+      body: forged.payload,
+    },
+    {
+      DB: db,
+      STRIPE_SECRET_KEY: 'sk_test_placeholder',
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      GOODAPI_API_KEY: 'goodapi-test-key',
+    },
+  );
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: 'Invalid webhook signature.' });
+  const count = await db.prepare('SELECT COUNT(*) AS count FROM contributions').first();
+  assert.equal(count.count, 0);
+  assert.equal(donationCalls, 0);
+});
 
 test('the signed webhook counts a paid session once and an unpaid session zero times', async (context) => {
   const db = new TestD1Database();
@@ -139,6 +184,103 @@ test('the signed webhook counts a paid session once and an unpaid session zero t
   });
   assert.equal(advertiser.total_contributed_cents, 1_000);
   assert.equal(donationCalls, 1);
+});
+
+test('an asynchronous paid webhook survives provider failure and scheduled retry', async (context) => {
+  const db = new TestD1Database();
+  const originalFetch = globalThis.fetch;
+  let providerAvailable = false;
+  let donationCalls = 0;
+  context.mock.method(console, 'error', () => {});
+  globalThis.fetch = async (_url, options) => {
+    donationCalls += 1;
+    const request = JSON.parse(options.body);
+    if (!providerAvailable) {
+      return new Response(JSON.stringify({ error: 'temporary provider failure' }), {
+        status: 503,
+      });
+    }
+    return new Response(
+      JSON.stringify({ donation_id: 'goodapi-retried', amount_cents: request.amount_cents }),
+      { status: 200 },
+    );
+  };
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+    db.close();
+  });
+
+  const env = {
+    DB: db,
+    STRIPE_SECRET_KEY: 'sk_test_placeholder',
+    STRIPE_WEBHOOK_SECRET: webhookSecret,
+    GOODAPI_API_KEY: 'goodapi-test-key',
+  };
+  const asyncSession = {
+    ...session('paid'),
+    id: 'cs_test_webhook_async',
+    payment_intent: 'pi_webhook_async',
+  };
+  const asynchronous = signedRequestBody(
+    asyncSession,
+    'evt_async_paid',
+    'checkout.session.async_payment_succeeded',
+  );
+  const failedResponse = await app.request(
+    'http://localhost/webhooks/stripe',
+    {
+      method: 'POST',
+      headers: { 'stripe-signature': asynchronous.signature },
+      body: asynchronous.payload,
+    },
+    env,
+  );
+
+  assert.equal(failedResponse.status, 500);
+  assert.deepEqual(await failedResponse.json(), { error: 'Webhook fulfillment failed.' });
+  let stored = await db
+    .prepare(
+      `SELECT charity_delivery_status, charity_delivery_attempts, goodapi_donation_id
+       FROM contributions WHERE stripe_checkout_session_id = ?`,
+    )
+    .bind(asyncSession.id)
+    .first();
+  assert.deepEqual({ ...stored }, {
+    charity_delivery_status: 'failed',
+    charity_delivery_attempts: 1,
+    goodapi_donation_id: null,
+  });
+
+  providerAvailable = true;
+  let scheduledWork;
+  worker.scheduled({}, env, {
+    waitUntil(work) {
+      scheduledWork = work;
+    },
+  });
+  assert.ok(scheduledWork);
+  await scheduledWork;
+
+  stored = await db
+    .prepare(
+      `SELECT charity_delivery_status, charity_delivery_attempts, goodapi_donation_id
+       FROM contributions WHERE stripe_checkout_session_id = ?`,
+    )
+    .bind(asyncSession.id)
+    .first();
+  assert.deepEqual({ ...stored }, {
+    charity_delivery_status: 'delivered',
+    charity_delivery_attempts: 2,
+    goodapi_donation_id: 'goodapi-retried',
+  });
+  const count = await db.prepare('SELECT COUNT(*) AS count FROM contributions').first();
+  const advertiser = await db
+    .prepare('SELECT total_contributed_cents FROM advertisers WHERE id = ?')
+    .bind(advertiserId)
+    .first();
+  assert.equal(count.count, 1);
+  assert.equal(advertiser.total_contributed_cents, 1_000);
+  assert.equal(donationCalls, 2);
 });
 
 test('an expired new-listing session deletes only its own uploaded logo', async () => {

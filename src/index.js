@@ -6,6 +6,7 @@ import {
   findAdvertiserByTokenHash,
   getContributionBySession,
   getLeaderboard,
+  isPublicLogo,
   recordConfirmedContribution,
 } from './db.js';
 import {
@@ -21,11 +22,16 @@ import {
 } from './domain.js';
 import {
   applySecurityHeaders,
+  canonicalOriginResponse,
   htmlResponse,
   invalidatePublicHomepage,
+  publicAssetCacheKey,
   publicCacheKey,
-  requireReasonableBodySize,
+  readFormDataWithinLimit,
+  readTextWithinLimit,
+  requireRateLimit,
   requireSameOrigin,
+  shouldUseStrictTransport,
 } from './http.js';
 import {
   contributionFromCheckoutSession,
@@ -48,13 +54,18 @@ import {
 const app = new Hono();
 
 app.use('*', async (context, next) => {
-  await next();
+  const config = configFor(context);
+  const canonicalResponse = await canonicalOriginResponse(context.req.raw, config.siteUrl);
+  if (canonicalResponse) context.res = canonicalResponse;
+  else await next();
   const mutableResponse = new Response(context.res.body, {
     status: context.res.status,
     statusText: context.res.statusText,
     headers: new Headers(context.res.headers),
   });
-  context.res = applySecurityHeaders(mutableResponse);
+  context.res = applySecurityHeaders(mutableResponse, {
+    strictTransport: shouldUseStrictTransport(context.req.raw, config.siteUrl),
+  });
 });
 
 function configFor(context) {
@@ -137,9 +148,8 @@ app.post('/checkout', async (context) => {
   const config = configFor(context);
   if (!config.checkoutEnabled) return checkoutClosed(context, config);
   requireSameOrigin(context.req.raw);
-  requireReasonableBodySize(context.req.raw);
-
-  const formData = await context.req.formData();
+  await requireRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'new-checkout');
+  const formData = await readFormDataWithinLimit(context.req.raw, 700 * 1024);
   const values = safeFormValues(formData);
   let listing;
   let logo;
@@ -209,6 +219,8 @@ app.get('/manage/:token', async (context) => {
     return htmlResponse(context, result.document, result.status);
   }
 
+  await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'manage');
+
   const advertiser = await findAdvertiserByTokenHash(context.env.DB, await hashToken(token));
   if (!advertiser) {
     const result = messagePage(config, {
@@ -227,10 +239,15 @@ app.post('/manage/:token/checkout', async (context) => {
   const config = configFor(context);
   if (!config.checkoutEnabled) return checkoutClosed(context, config);
   requireSameOrigin(context.req.raw);
-  requireReasonableBodySize(context.req.raw, 16 * 1024);
 
   const token = context.req.param('token');
   if (!isManagementToken(token)) throw Object.assign(new Error('Management link not found.'), { status: 404 });
+  await requireRateLimit(
+    context.req.raw,
+    context.env.CHECKOUT_RATE_LIMITER,
+    'existing-checkout',
+  );
+  const formData = await readFormDataWithinLimit(context.req.raw, 16 * 1024);
   const advertiser = await findAdvertiserByTokenHash(context.env.DB, await hashToken(token));
   if (!advertiser) throw Object.assign(new Error('Management link not found.'), { status: 404 });
   if (advertiser.is_hidden) {
@@ -239,7 +256,6 @@ app.post('/manage/:token/checkout', async (context) => {
     });
   }
 
-  const formData = await context.req.formData();
   const amount = String(formData.get('amount') || '');
   let amountCents;
   try {
@@ -277,12 +293,13 @@ app.post('/webhooks/stripe', async (context) => {
     return context.json({ error: 'Webhook configuration or signature is missing.' }, 400);
   }
 
+  const payload = await readTextWithinLimit(context.req.raw, 1024 * 1024);
   let event;
   try {
     const stripe = createStripeClient(context.env.STRIPE_SECRET_KEY);
     event = await verifyStripeEvent(
       stripe,
-      await context.req.text(),
+      payload,
       signature,
       context.env.STRIPE_WEBHOOK_SECRET,
     );
@@ -343,6 +360,7 @@ app.get('/success', async (context) => {
     });
     return htmlResponse(context, result.document, result.status);
   }
+  await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'success');
 
   const contribution = await getContributionBySession(context.env.DB, sessionId);
 
@@ -360,18 +378,23 @@ app.get('/success', async (context) => {
 app.get('/logos/*', async (context) => {
   const key = context.req.path.slice(1);
   if (!/^logos\/[0-9a-f-]{36}\.(?:png|jpg|webp)$/i.test(key)) return context.notFound();
+  if (new URL(context.req.url).pathname !== `/${key}`) return context.notFound();
 
   const cache = globalThis.caches?.default;
-  const cacheKey = new Request(context.req.url, { method: 'GET' });
+  const cacheKey = publicAssetCacheKey(context.req.raw);
   if (cache) {
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
   }
 
+  await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'logo');
+
+  if (!(await isPublicLogo(context.env.DB, key))) return context.notFound();
+
   const object = await context.env.LOGOS.get(key);
   if (!object) return context.notFound();
   const headers = new Headers({
-    'Cache-Control': 'public, max-age=31536000, immutable',
+    'Cache-Control': 'public, max-age=60, s-maxage=60, must-revalidate',
     'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
     ETag: object.httpEtag,
   });
@@ -384,11 +407,10 @@ app.get('/about', (context) => htmlResponse(context, aboutPage(configFor(context
 app.get('/terms', (context) => htmlResponse(context, termsPage(configFor(context))));
 app.get('/privacy', (context) => htmlResponse(context, privacyPage(configFor(context))));
 
-app.get('/health', async (context) => {
+app.get('/health', (context) => {
   const config = configFor(context);
-  const database = context.env.DB ? await context.env.DB.prepare('SELECT 1 AS ok').first() : null;
   const response = context.json({
-    ok: database?.ok === 1,
+    ok: true,
     checkoutEnabled: config.checkoutEnabled,
   });
   response.headers.set('Cache-Control', 'no-store');

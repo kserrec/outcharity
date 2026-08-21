@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   getLeaderboard,
+  isPublicLogo,
   listUndeliveredContributions,
   recordConfirmedContribution,
 } from '../src/db.js';
@@ -198,6 +199,16 @@ test('ranking uses total descending, earlier creation for ties, and hides flagge
     ['Charlie', 'Alpha', 'Bravo'],
   );
 
+  await db
+    .prepare('UPDATE advertisers SET created_at = ? WHERE id = ?')
+    .bind('2026-01-01T00:00:00.000Z', bravoId)
+    .run();
+  board = await getLeaderboard(db);
+  assert.deepEqual(
+    board.advertisers.map((entry) => entry.name),
+    ['Charlie', 'Alpha', 'Bravo'],
+  );
+
   await db.prepare('UPDATE advertisers SET is_hidden = 1 WHERE id = ?').bind(charlieId).run();
   board = await getLeaderboard(db);
   assert.deepEqual(
@@ -206,26 +217,90 @@ test('ranking uses total descending, earlier creation for ties, and hides flagge
   );
   assert.equal(board.grossCents, 8_000);
   assert.equal(board.charityCents, 7_200);
+  assert.equal(await isPublicLogo(db, `logos/${charlieId}.png`), false);
+  assert.equal(await isPublicLogo(db, `logos/${alphaId}.png`), true);
 });
 
-test('confirmed financial fields cannot be changed or deleted', async (context) => {
+test('confirmed contribution identity, allocation, provenance, and time are immutable', async (context) => {
   const db = new TestD1Database();
   context.after(() => db.close());
   const advertiserId = '66666666-6666-4666-8666-666666666666';
+  const otherAdvertiserId = '99999999-9999-4999-8999-999999999999';
+  const confirmed = record({
+    advertiserId,
+    sessionId: 'cs_test_immutable',
+    paymentIntentId: 'pi_immutable',
+    advertiser: advertiser(advertiserId, 'Delta'),
+  });
+  await recordConfirmedContribution(db, confirmed);
   await recordConfirmedContribution(
     db,
     record({
-      advertiserId,
-      sessionId: 'cs_test_immutable',
-      paymentIntentId: 'pi_immutable',
-      advertiser: advertiser(advertiserId, 'Delta'),
+      advertiserId: otherAdvertiserId,
+      sessionId: 'cs_test_immutable_other',
+      paymentIntentId: 'pi_immutable_other',
+      advertiser: advertiser(otherAdvertiserId, 'Foxtrot'),
     }),
   );
 
-  await assert.rejects(() =>
-    db.prepare('UPDATE contributions SET gross_amount_cents = 1').run(),
+  for (const { name, sql, values } of [
+    {
+      name: 'record identity',
+      sql: 'UPDATE contributions SET id = ? WHERE id = ?',
+      values: [crypto.randomUUID(), confirmed.id],
+    },
+    {
+      name: 'advertiser ownership',
+      sql: 'UPDATE contributions SET advertiser_id = ? WHERE id = ?',
+      values: [otherAdvertiserId, confirmed.id],
+    },
+    {
+      name: 'gross and allocated cents',
+      sql: `UPDATE contributions
+            SET gross_amount_cents = ?, charity_amount_cents = ?, platform_amount_cents = ?
+            WHERE id = ?`,
+      values: [1_001, 901, 100, confirmed.id],
+    },
+    {
+      name: 'allocation percentages',
+      sql: `UPDATE contributions
+            SET charity_percentage = ?, platform_percentage = ?
+            WHERE id = ?`,
+      values: [89, 11, confirmed.id],
+    },
+    {
+      name: 'charity name',
+      sql: 'UPDATE contributions SET charity_name = ? WHERE id = ?',
+      values: ['Different Charity', confirmed.id],
+    },
+    {
+      name: 'charity EIN',
+      sql: 'UPDATE contributions SET charity_ein = ? WHERE id = ?',
+      values: ['98-7654321', confirmed.id],
+    },
+    {
+      name: 'Stripe Checkout provenance',
+      sql: 'UPDATE contributions SET stripe_checkout_session_id = ? WHERE id = ?',
+      values: ['cs_test_changed', confirmed.id],
+    },
+    {
+      name: 'Stripe Payment Intent provenance',
+      sql: 'UPDATE contributions SET stripe_payment_intent_id = ? WHERE id = ?',
+      values: ['pi_changed', confirmed.id],
+    },
+    {
+      name: 'confirmation time',
+      sql: 'UPDATE contributions SET created_at = ? WHERE id = ?',
+      values: ['2030-01-01T00:00:00.000Z', confirmed.id],
+    },
+  ]) {
+    await assert.rejects(() => db.prepare(sql).bind(...values).run(), name);
+  }
+
+  await assert.rejects(
+    () => db.prepare('DELETE FROM contributions WHERE id = ?').bind(confirmed.id).run(),
+    'confirmed contribution deletion',
   );
-  await assert.rejects(() => db.prepare('DELETE FROM contributions').run());
 });
 
 test('repeated failures cannot starve newer charity deliveries', async (context) => {
@@ -253,9 +328,25 @@ test('repeated failures cannot starve newer charity deliveries', async (context)
        WHERE stripe_checkout_session_id < 'cs_test_delivery_25'`,
     )
     .run();
+  await db
+    .prepare(
+      `UPDATE contributions
+       SET charity_delivery_status = 'delivered',
+           charity_delivery_attempts = 0,
+           goodapi_donation_id = 'donation-already-delivered'
+       WHERE stripe_checkout_session_id = 'cs_test_delivery_00'`,
+    )
+    .run();
 
   const selected = await listUndeliveredContributions(db);
   assert.equal(selected.length, 25);
+  assert.equal(
+    selected.some(
+      (contribution) =>
+        contribution.stripe_checkout_session_id === 'cs_test_delivery_00',
+    ),
+    false,
+  );
   assert.deepEqual(
     selected
       .slice(0, 2)

@@ -30,4 +30,5 @@ Payments stay disabled until every Phase 2 approval item is complete.
 - [ ] Complete a real payment and duplicate-webhook test
 - [ ] Verify the charity delivery record and public cache refresh
 - [ ] Enable Cloudflare Web Analytics and confirm Worker error logs
-- [ ] Attach `outcharity.com`
+- [ ] Confirm the configured `outcharity.com` custom domain, certificate, and Cloudflare Always Use HTTPS setting
+- [ ] Enable GitHub native secret scanning and push protection if the private-repository feature becomes available; until then, require the checksum-pinned Gitleaks workflow to pass

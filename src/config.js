@@ -46,7 +46,8 @@ function isLocalUrl(value) {
 export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
   const issues = [];
   const requestOrigin = new URL(requestUrl).origin;
-  let siteUrl = parseWebUrl(env.SITE_URL || requestOrigin, 'SITE_URL', issues);
+  const siteUrlSource = env.SITE_URL || (isLocalUrl(requestOrigin) ? requestOrigin : '');
+  let siteUrl = parseWebUrl(siteUrlSource, 'SITE_URL', issues);
   if (siteUrl) {
     const parsedSiteUrl = new URL(siteUrl);
     if (parsedSiteUrl.pathname !== '/' || parsedSiteUrl.search || parsedSiteUrl.hash) {
@@ -134,11 +135,22 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET && env.GOODAPI_API_KEY,
   );
   const storageConfigured = Boolean(env.DB && env.LOGOS);
+  const protectionConfigured = Boolean(
+    env.CHECKOUT_RATE_LIMITER?.limit && env.LOOKUP_RATE_LIMITER?.limit,
+  );
+  const deploymentConfigured = Boolean(
+    siteUrl &&
+      (isLocalUrl(requestOrigin)
+        ? isLocalUrl(siteUrl)
+        : siteUrl.startsWith('https://') && siteUrl === requestOrigin),
+  );
   const checkoutEnabled =
     launchApproved &&
     campaignConfigured &&
     paymentConfigured &&
     storageConfigured &&
+    protectionConfigured &&
+    deploymentConfigured &&
     issues.length === 0;
 
   return {
@@ -156,6 +168,8 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     campaignConfigured,
     paymentConfigured,
     storageConfigured,
+    protectionConfigured,
+    deploymentConfigured,
     checkoutEnabled,
     publicCampaign: launchApproved && campaignConfigured && issues.length === 0,
     issues: [...issues, ...campaignIssues],

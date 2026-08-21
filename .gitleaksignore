@@ -1,0 +1,6 @@
+# Known inert fixtures in the initial test-only commit.
+db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/webhook.test.js:stripe-access-token:11
+db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/webhook.test.js:stripe-access-token:80
+db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/webhook.test.js:stripe-access-token:147
+db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/payments.test.js:generic-api-key:107
+db1fa5d87fecd55c8815cf7c3a24ae236e53fb64:test/payments.test.js:stripe-access-token:78

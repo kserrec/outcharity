@@ -17,7 +17,7 @@ The deployable Worker bundle is about 107 KB compressed. There are two runtime p
 
 ## Safety gate
 
-Checkout remains closed unless all required charity details, Stripe secrets, the GoodAPI secret, and `OUTCHARITY_LAUNCH_APPROVED=true` are present. This prevents an unfinished or unapproved campaign from accepting money.
+Checkout remains closed unless all required charity details, Stripe secrets, the GoodAPI secret, both Cloudflare rate-limit bindings, the canonical production origin, and `OUTCHARITY_LAUNCH_APPROVED=true` are present. This prevents an unfinished, unprotected, or unapproved campaign from accepting money.
 
 Version 1 is locked to a 90% charity allocation and a 10% platform allocation. A conflicting runtime value keeps checkout closed and cannot change the public promise. Fractional cents are rounded in the charity's favor. Outcharity absorbs payment-processing fees rather than subtracting them from the charity amount.
 
@@ -35,6 +35,8 @@ The zero UUID in `wrangler.jsonc` is an inert local placeholder. Creating the pr
 
 Cloudflare Workers Logs supplies initial error monitoring. Cloudflare Web Analytics can be enabled from the Cloudflare dashboard without adding browser code.
 
+Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs are disabled. GitHub dependency alerts and automatic security updates are enabled. GitHub does not offer native secret scanning for this private repository under the current account features, so the checksum-pinned, MIT-licensed Gitleaks scanner checks full history on every push and pull request until native push protection becomes available.
+
 GoodAPI's charity-donation documentation requires a one-time subscription activation before live donation calls work. Do that only after GoodAPI confirms the standalone agreement, full price, charity eligibility, required public wording, refund process, and exact compliance coverage. Do not enable `OUTCHARITY_LAUNCH_APPROVED` until those answers and the final terms are in place.
 
 ## Payment integrity
@@ -46,4 +48,5 @@ GoodAPI's charity-donation documentation requires a one-time subscription activa
 - Charity delivery uses the Checkout Session ID as the provider idempotency key.
 - Failed charity deliveries are logged, returned as webhook failures for Stripe retry, and retried by the 15-minute scheduled task.
 - Expired new-listing Checkout Sessions delete their unused uploaded logos.
+- Logos are served only for confirmed, visible advertisers and cached for at most one minute, so hiding a listing also revokes its public image promptly.
 - Public leaderboard HTML is cached for five seconds; successful webhook insertion invalidates the local edge copy immediately.

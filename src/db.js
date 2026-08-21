@@ -105,6 +105,23 @@ export async function getContributionBySession(db, sessionId) {
     .first();
 }
 
+export async function isPublicLogo(db, logoKey) {
+  const match = /^logos\/([0-9a-f-]{36})\.(?:png|jpg|webp)$/i.exec(logoKey);
+  if (!match) return false;
+  const advertiser = await db
+    .prepare(
+      `SELECT 1 AS visible
+       FROM advertisers
+       WHERE id = ?
+         AND logo_key = ?
+         AND is_hidden = 0
+         AND total_contributed_cents > 0`,
+    )
+    .bind(match[1].toLowerCase(), logoKey)
+    .first();
+  return advertiser?.visible === 1;
+}
+
 export async function recordConfirmedContribution(db, record) {
   const statements = [];
   if (record.advertiser) {

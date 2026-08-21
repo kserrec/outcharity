@@ -3,9 +3,11 @@ import test from 'node:test';
 
 import {
   contributionFromCheckoutSession,
+  existingAdvertiserMetadata,
   newAdvertiserMetadata,
 } from '../src/payments.js';
 import {
+  createCheckoutSession,
   createGoodApiDonation,
   createStripeClient,
   verifyStripeEvent,
@@ -52,7 +54,32 @@ test('a confirmed Checkout Session becomes an exact integer-cent contribution', 
   assert.equal(contribution.grossCents, 1_001);
   assert.equal(contribution.charityCents, 901);
   assert.equal(contribution.platformCents, 100);
+  assert.equal(contribution.charityName, 'Example Charity');
+  assert.equal(contribution.charityEin, '12-3456789');
+  assert.equal(contribution.stripeCheckoutSessionId, 'cs_test_1234567890');
+  assert.equal(contribution.stripePaymentIntentId, 'pi_1234567890');
   assert.equal(contribution.advertiser.id, advertiserId);
+});
+
+test('an existing advertiser Checkout Session remains a cumulative contribution', () => {
+  const metadata = existingAdvertiserMetadata(
+    { advertiserId, amountCents: 2_500 },
+    config,
+  );
+  const contribution = contributionFromCheckoutSession(
+    paidSession({
+      id: 'cs_test_existing_12345678',
+      amount_total: 2_500,
+      payment_intent: 'pi_existing_12345678',
+      metadata,
+    }),
+  );
+
+  assert.equal(contribution.advertiserId, advertiserId);
+  assert.equal(contribution.advertiser, null);
+  assert.equal(contribution.grossCents, 2_500);
+  assert.equal(contribution.charityCents, 2_250);
+  assert.equal(contribution.platformCents, 250);
 });
 
 test('an unpaid or amount-mismatched Checkout Session cannot become a contribution', () => {
@@ -72,6 +99,44 @@ test('unrelated Stripe Checkout Sessions are ignored', () => {
   assert.equal(contributionFromCheckoutSession(session), null);
 });
 
+test('Stripe Checkout charges the exact requested cents and preserves fulfillment data', async () => {
+  let captured;
+  const stripe = {
+    checkout: {
+      sessions: {
+        async create(input) {
+          captured = input;
+          return { id: 'cs_test_created', url: 'https://checkout.stripe.com/test' };
+        },
+      },
+    },
+  };
+  const metadata = { outcharity: 'v1', kind: 'existing' };
+  const input = {
+    advertiserId,
+    amountCents: 1_001,
+    charityName: 'Example Charity',
+    charityPercentage: 90,
+    successUrl: 'https://outcharity.com/success?session_id={CHECKOUT_SESSION_ID}',
+    cancelUrl: 'https://outcharity.com/manage/token',
+    metadata,
+  };
+
+  const session = await createCheckoutSession(stripe, input);
+
+  assert.equal(session.url, 'https://checkout.stripe.com/test');
+  assert.equal(captured.mode, 'payment');
+  assert.equal(captured.client_reference_id, advertiserId);
+  assert.equal(captured.success_url, input.successUrl);
+  assert.equal(captured.cancel_url, input.cancelUrl);
+  assert.equal(captured.line_items[0].quantity, 1);
+  assert.equal(captured.line_items[0].price_data.currency, 'usd');
+  assert.equal(captured.line_items[0].price_data.unit_amount, 1_001);
+  assert.deepEqual(captured.metadata, metadata);
+  assert.equal(captured.payment_intent_data.metadata.advertiser_id, advertiserId);
+  assert.match(captured.custom_text.submit.message, /Rankings may change/);
+});
+
 test('Stripe webhook verification accepts a valid signature and rejects a bad one', async () => {
   const secret = 'whsec_test_secret';
   const payload = JSON.stringify({ id: 'evt_test', object: 'event', type: 'test.event' });
@@ -83,7 +148,7 @@ test('Stripe webhook verification accepts a valid signature and rejects a bad on
   await assert.rejects(() => verifyStripeEvent(stripe, payload, signature, 'wrong_secret'));
 });
 
-test('GoodAPI delivery sends charity cents with a stable idempotency key', async () => {
+test('GoodAPI sends exact charity cents and rejects a mismatched confirmation', async () => {
   let captured;
   const contribution = {
     id: 'contribution-1',
@@ -104,5 +169,17 @@ test('GoodAPI delivery sends charity cents with a stable idempotency key', async
   assert.equal(result.donation_id, 'donation-1');
   assert.equal(captured.options.headers.Authorization, 'test-api-key');
   assert.equal(captured.body.amount_cents, 901);
+  assert.equal(captured.body.ein, '12-3456789');
+  assert.equal(captured.body.charity_name, 'Example Charity');
   assert.equal(captured.body.idempotency_key, 'outcharity-cs_test_1234567890');
+
+  await assert.rejects(
+    () =>
+      createGoodApiDonation(contribution, 'test-api-key', async () =>
+        new Response(
+          JSON.stringify({ donation_id: 'donation-wrong-amount', amount_cents: 900 }),
+          { status: 200 },
+        )),
+    /incomplete or mismatched donation record/,
+  );
 });

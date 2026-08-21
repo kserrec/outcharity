@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { getConfig } from '../src/config.js';
+import { hashToken } from '../src/domain.js';
 import { app } from '../src/index.js';
 import { homePage } from '../src/views.js';
 
@@ -23,6 +24,8 @@ function completeEnvironment() {
     GOODAPI_API_KEY: 'configured',
     DB: {},
     LOGOS: {},
+    CHECKOUT_RATE_LIMITER: { limit() {} },
+    LOOKUP_RATE_LIMITER: { limit() {} },
   };
 }
 
@@ -32,12 +35,17 @@ test('checkout cannot open without explicit approval and every required integrat
 
   for (const key of [
     'OUTCHARITY_LAUNCH_APPROVED',
+    'CHARITY_NAME',
+    'CHARITY_URL',
+    'CHARITY_EIN',
     'CHARITY_DISCLOSURE',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'GOODAPI_API_KEY',
     'DB',
     'LOGOS',
+    'CHECKOUT_RATE_LIMITER',
+    'LOOKUP_RATE_LIMITER',
   ]) {
     const incomplete = completeEnvironment();
     delete incomplete[key];
@@ -51,6 +59,241 @@ test('checkout cannot open without explicit approval and every required integrat
   assert.equal(lockedConfig.checkoutEnabled, false);
   assert.equal(lockedConfig.charityPercentage, 90);
   assert.equal(lockedConfig.platformPercentage, 10);
+
+  const missingProductionOrigin = completeEnvironment();
+  delete missingProductionOrigin.SITE_URL;
+  assert.equal(
+    getConfig(missingProductionOrigin, 'https://outcharity.com').checkoutEnabled,
+    false,
+  );
+
+  const alternateOrigin = completeEnvironment();
+  assert.equal(
+    getConfig(alternateOrigin, 'https://outcharity.example').checkoutEnabled,
+    false,
+  );
+});
+
+test('both checkout routes honor the disabled launch gate before downstream work', async (context) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error('Stripe must not be reached while checkout is disabled');
+  };
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const environment = completeEnvironment();
+  environment.OUTCHARITY_LAUNCH_APPROVED = 'false';
+  environment.DB = {
+    prepare() {
+      throw new Error('D1 must not be reached while checkout is disabled');
+    },
+  };
+  environment.LOGOS = {
+    async put() {
+      throw new Error('R2 must not be reached while checkout is disabled');
+    },
+  };
+  const rejectingLimiter = {
+    async limit() {
+      throw new Error('rate limiting must not run while checkout is disabled');
+    },
+  };
+  environment.CHECKOUT_RATE_LIMITER = rejectingLimiter;
+  environment.LOOKUP_RATE_LIMITER = rejectingLimiter;
+
+  for (const path of [
+    '/checkout',
+    `/manage/${'a'.repeat(64)}/checkout`,
+  ]) {
+    const response = await app.fetch(
+      new Request(`https://outcharity.com${path}`, {
+        method: 'POST',
+        headers: { Origin: 'https://outcharity.com' },
+        body: new URLSearchParams({ amount: '25' }),
+      }),
+      environment,
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+    assert.equal(response.status, 503, path);
+    assert.match(await response.text(), /Checkout is not open yet/, path);
+  }
+});
+
+test('the new-listing route sends validated cents and matching fulfillment data to Stripe', async (context) => {
+  const originalFetch = globalThis.fetch;
+  let stripeRequest;
+  globalThis.fetch = async (url, options) => {
+    stripeRequest = { url: String(url), options };
+    return new Response(
+      JSON.stringify({
+        id: 'cs_test_route_checkout',
+        object: 'checkout.session',
+        url: 'https://checkout.stripe.com/c/pay/route-test',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const uploaded = [];
+  const environment = completeEnvironment();
+  environment.STRIPE_SECRET_KEY = 'sk_test_placeholder';
+  environment.CHECKOUT_RATE_LIMITER = {
+    async limit() {
+      return { success: true };
+    },
+  };
+  environment.LOGOS = {
+    async put(key, bytes, options) {
+      uploaded.push({ key, bytes, options });
+    },
+    async delete() {},
+  };
+  const form = new FormData();
+  form.set('name', 'Route Company');
+  form.set('url', 'https://example.com');
+  form.set('description', 'A complete route-to-Stripe integration test.');
+  form.set('amount', '25.01');
+  form.set(
+    'logo',
+    new File([Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])], 'logo.png', {
+      type: 'image/png',
+    }),
+  );
+
+  const response = await app.fetch(
+    new Request('https://outcharity.com/checkout', {
+      method: 'POST',
+      headers: { Origin: 'https://outcharity.com' },
+      body: form,
+    }),
+    environment,
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+
+  assert.equal(response.status, 303);
+  assert.ok(stripeRequest, 'Stripe request was not sent');
+  const stripeBody = new URLSearchParams(String(stripeRequest.options.body));
+  assert.equal(response.headers.get('Location'), 'https://checkout.stripe.com/c/pay/route-test');
+  assert.equal(stripeRequest.url, 'https://api.stripe.com/v1/checkout/sessions');
+  assert.equal(stripeBody.get('line_items[0][price_data][unit_amount]'), '2501');
+  assert.equal(stripeBody.get('metadata[requested_amount_cents]'), '2501');
+  assert.equal(stripeBody.get('metadata[kind]'), 'new');
+  assert.equal(stripeBody.get('metadata[name]'), 'Route Company');
+  assert.equal(
+    stripeBody.get('metadata[description]'),
+    'A complete route-to-Stripe integration test.',
+  );
+  assert.equal(stripeBody.get('metadata[url]'), 'https://example.com/');
+  assert.equal(stripeBody.get('metadata[charity_name]'), 'Example Charity');
+  assert.equal(stripeBody.get('metadata[charity_ein]'), '12-3456789');
+  assert.equal(
+    stripeBody.get('client_reference_id'),
+    stripeBody.get('metadata[advertiser_id]'),
+  );
+  assert.equal(
+    stripeBody.get('payment_intent_data[metadata][advertiser_id]'),
+    stripeBody.get('metadata[advertiser_id]'),
+  );
+  assert.equal(stripeBody.get('cancel_url'), 'https://outcharity.com/submit?amount=25.01');
+  const successUrl = new URL(stripeBody.get('success_url'));
+  const managementToken = successUrl.searchParams.get('manage');
+  assert.match(managementToken, /^[a-f0-9]{64}$/);
+  assert.equal(
+    stripeBody.get('metadata[management_token_hash]'),
+    await hashToken(managementToken),
+  );
+  assert.equal(uploaded.length, 1);
+  assert.equal(uploaded[0].key, stripeBody.get('metadata[logo_key]'));
+  assert.equal(uploaded[0].options.httpMetadata.contentType, 'image/png');
+});
+
+test('the give-more route sends entered cents and the managed advertiser to Stripe', async (context) => {
+  const originalFetch = globalThis.fetch;
+  let stripeRequest;
+  globalThis.fetch = async (url, options) => {
+    stripeRequest = { url: String(url), options };
+    return new Response(
+      JSON.stringify({
+        id: 'cs_test_route_give_more',
+        object: 'checkout.session',
+        url: 'https://checkout.stripe.com/c/pay/give-more-test',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  };
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const managementToken = 'a'.repeat(64);
+  const advertiserId = '22222222-2222-4222-8222-222222222222';
+  let boundTokenHash;
+  const environment = completeEnvironment();
+  environment.STRIPE_SECRET_KEY = 'sk_test_placeholder';
+  environment.CHECKOUT_RATE_LIMITER = {
+    async limit() {
+      return { success: true };
+    },
+  };
+  environment.DB = {
+    prepare() {
+      return {
+        bind(tokenHash) {
+          boundTokenHash = tokenHash;
+          return this;
+        },
+        async first() {
+          return {
+            id: advertiserId,
+            name: 'Managed Company',
+            total_contributed_cents: 3_200,
+            is_hidden: 0,
+            rank: 4,
+          };
+        },
+      };
+    },
+  };
+  environment.LOGOS = {
+    async put() {
+      throw new Error('give-more checkout must not upload a logo');
+    },
+  };
+
+  const response = await app.fetch(
+    new Request(`https://outcharity.com/manage/${managementToken}/checkout`, {
+      method: 'POST',
+      headers: { Origin: 'https://outcharity.com' },
+      body: new URLSearchParams({ amount: '32.01' }),
+    }),
+    environment,
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+
+  assert.equal(response.status, 303);
+  assert.ok(stripeRequest, 'Stripe request was not sent');
+  const stripeBody = new URLSearchParams(String(stripeRequest.options.body));
+  assert.equal(response.headers.get('Location'), 'https://checkout.stripe.com/c/pay/give-more-test');
+  assert.equal(stripeRequest.url, 'https://api.stripe.com/v1/checkout/sessions');
+  assert.equal(boundTokenHash, await hashToken(managementToken));
+  assert.equal(stripeBody.get('line_items[0][price_data][unit_amount]'), '3201');
+  assert.equal(stripeBody.get('metadata[requested_amount_cents]'), '3201');
+  assert.equal(stripeBody.get('metadata[kind]'), 'existing');
+  assert.equal(stripeBody.get('metadata[advertiser_id]'), advertiserId);
+  assert.equal(stripeBody.get('client_reference_id'), advertiserId);
+  assert.equal(
+    stripeBody.get('success_url'),
+    `https://outcharity.com/success?session_id={CHECKOUT_SESSION_ID}&manage=${managementToken}`,
+  );
+  assert.equal(
+    stripeBody.get('cancel_url'),
+    `https://outcharity.com/manage/${managementToken}`,
+  );
 });
 
 test('server-rendered listings escape advertiser-controlled HTML', () => {

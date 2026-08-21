@@ -1,0 +1,40 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret history scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-pinned Gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl --fail --location --silent --show-error \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            --output /tmp/outcharity-gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  /tmp/outcharity-gitleaks.tar.gz" | sha256sum --check
+          tar -xzf /tmp/outcharity-gitleaks.tar.gz -C /tmp gitleaks
+      - name: Scan full git history
+        run: >-
+          /tmp/gitleaks git --redact --verbose
+          --log-opts="--all -- .
+          :(exclude).env :(exclude,glob)**/.env
+          :(exclude)*.env :(exclude,glob)**/*.env
+          :(exclude).env.* :(exclude,glob)**/.env.*
+          :(exclude)*.env.* :(exclude,glob)**/*.env.*
+          :(exclude).dev.vars* :(exclude,glob)**/.dev.vars*"
+          .
