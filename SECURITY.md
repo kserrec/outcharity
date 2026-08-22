@@ -3,6 +3,15 @@
 Outcharity's threat model and the deliberate trust decisions behind it. Audits should read this
 first so settled decisions are not re-reported unless something has changed.
 
+## Reporting a vulnerability
+
+Do not open a public GitHub issue for a suspected vulnerability. Email
+[`hello@outcharity.com`](mailto:hello@outcharity.com) with the affected code or endpoint, the
+potential impact, and the shortest reproduction you have. Use a local environment whenever
+possible; do not probe production in a way that creates a real payment, accesses another person's
+data, or disrupts the service. The maintainer will coordinate remediation and disclosure through
+the same private email thread.
+
 ## What the code defends
 
 - Money is counted only from Stripe webhook events whose signature verifies and whose amount,

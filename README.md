@@ -47,7 +47,10 @@ credentials remain encrypted Cloudflare Worker secrets.
 Cloudflare Workers Logs supplies error monitoring. Cloudflare Web Analytics is enabled through
 automatic injection for non-EU visitors, without adding an analytics package to the application.
 
-Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs are disabled. GitHub dependency alerts and automatic security updates are enabled. GitHub does not offer native secret scanning for this private repository under the current account features, so the checksum-pinned, MIT-licensed Gitleaks scanner checks full history on every push and pull request until native push protection becomes available.
+Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs
+are disabled. GitHub dependency alerts and automatic security updates are enabled. The
+checksum-pinned Gitleaks scanner checks the repository's full history on every push and pull
+request.
 
 GoodAPI Donations is activated, the production charity record is verified, the live provider key
 is stored as a Worker secret, and the complete flow passed a disposable sandbox rehearsal. The
@@ -77,3 +80,26 @@ deployment evidence and exact continuation point.
 - Outside local development, checkout requires a live-mode Stripe key and the webhook refuses non-live events, so a test-mode configuration can never create a live listing or charity delivery.
 
 `SECURITY.md` records the threat model, the accepted trust decisions, and the audit history.
+
+## Contributing
+
+Bug reports and pull requests are welcome in the
+[GitHub repository](https://github.com/kserrec/outcharity). Keep changes focused, add or update
+tests for behavior changes, and run the release checks before opening a pull request:
+
+```sh
+npm test
+npm run check
+npm run build
+git diff --check
+```
+
+Report suspected vulnerabilities privately using the instructions in [`SECURITY.md`](SECURITY.md),
+not through a public issue. Contributions accepted into this repository are licensed under the
+same MIT License as the project.
+
+## License
+
+Outcharity is open source software available under the [MIT License](LICENSE). The
+`"private": true` package setting prevents accidental publication to the npm registry; it does not
+restrict use of the source code under the MIT License.
