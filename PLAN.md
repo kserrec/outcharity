@@ -334,12 +334,39 @@ the launch switch still prevents Checkout creation.
   `/health` still reports `checkoutEnabled: true`
   - Done 2026-08-22: `No migrations to apply`; all five triggers present in production; Worker
     version `0530675f-0de1-4370-b604-a6a4130a2120` at 100%; `/health` ok
-- [ ] Smoke-test the leaderboard, submission, management, success, legal, logo, sitemap, redirect,
-  certificate, security-header, and mobile flows
+- [x] Publish Outcharity as an MIT-licensed open-source project from the default `main` branch
+  - The public repository includes the standard MIT grant in `LICENSE`, matching `MIT` package
+    metadata, contribution guidance in `README.md`, and private vulnerability-reporting directions
+    in `SECURITY.md`
+  - GitHub release `v0.1.0` points to commit `1951c86`; the release does not publish an npm package,
+    and `package.json` remains `"private": true` to prevent accidental npm publication
+  - GitHub native secret scanning and push protection are enabled now that the repository is public.
+    Dependabot security updates remain enabled and the open Dependabot alert count is zero
+- [x] Restore the full-history release security gate after the hardening commits
+  - The failing Gitleaks 8.30.1 job reported 19 findings at commit `d63d4cf`, all in Stripe-shaped
+    test fixtures. They reduced to 17 unique immutable fingerprints that were absent from
+    `.gitleaksignore`; no application or deployment secret was found
+  - Commit `c3920a2` adds only those 17 fixture fingerprints. The identical checksum-pinned local
+    scan then passed, and GitHub Security runs `32593742789` and `32594745669` passed on `main`
+- [x] Reconcile the open-source release with the production Worker and smoke-test public surfaces
+  - From deployed source commit `55c739d` through release `v0.1.0`, `src/`, `public/`, `db/`, and
+    `wrangler.jsonc` are unchanged. The only package changes are descriptive MIT/repository
+    metadata, so Worker version `0530675f-0de1-4370-b604-a6a4130a2120` already contains the exact
+    production code, assets, schema, and configuration; no no-op Worker version was created
+  - A fresh `npm ci`, all 70 tests, syntax checking, the dotenv-isolated 115.34 KiB compressed dry
+    build, `npm audit`, `npm audit --omit=dev`, `git diff --check`, and the full-history Gitleaks scan
+    pass. Both dependency audits report zero vulnerabilities
+  - Live read-only checks return `200` for the homepage, submission, Terms, Privacy, sitemap,
+    robots, and the confirmed listing logo; `/health` returns checkout enabled; HTTP redirects to
+    HTTPS; invalid management/logo paths return `404`; an invalid success link returns `400`; and
+    the homepage and logo retain the expected CSP, HSTS, frame denial, and cache policies. Mobile
+    hierarchy remains covered by the passing rendering and stylesheet tests
+- [ ] Reconcile the first confirmed public listing through every private provider and datastore
+  - On 2026-08-22 the public leaderboard showed `Outcharity` at #1 with `$100` given, and its PNG
+    logo returned `200`. This proves the public confirmed-listing read path, but the corresponding
+    Stripe event, D1 rows, scheduled hold state, and eventual GoodAPI record remain unverified
 - [ ] Begin public launch promotion only after every check above passes; do not manufacture a live
   purchase for testing
-- [ ] Monitor the first genuine advertiser purchase through Stripe, the signed webhook, D1,
-  GoodAPI, cache invalidation, and the public leaderboard
 - [ ] Resend that genuine webhook once and verify the database and GoodAPI idempotency guarantees
   prevent duplicate financial records
 - [ ] Watch Worker errors, Stripe webhook delivery, GoodAPI history, and D1 state closely through
