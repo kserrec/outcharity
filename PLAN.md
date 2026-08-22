@@ -220,16 +220,30 @@ money moved, no test row entered production, and no permanent staging system rem
 - [x] Reverify the final Terms and Privacy pages, Worker logs, and `/health` still reporting
   `checkoutEnabled: false` after the locked homepage deployment
 - [ ] Reverify `hello@outcharity.com` delivery and the final Stripe and GoodAPI dashboard status
-- [ ] Require the checksum-pinned Gitleaks workflow and dependency checks to pass; enable GitHub's
+- [x] Require the checksum-pinned Gitleaks workflow and dependency checks to pass; enable GitHub's
   native secret scanning and push protection only if the private-repository account now offers them
+  - A fresh `npm ci`, the full `npm audit`, and `npm audit --omit=dev` all report zero
+    vulnerabilities. GitHub dependency alerts and automatic security updates are enabled, and the
+    Dependabot alert list is empty
+  - GitHub's API reports that native secret scanning is disabled, and the current account does not
+    offer Secret Protection for this user-owned private repository. No visibility or billing change
+    was made merely to obtain it
+  - The workflow's exact Gitleaks 8.30.1 archive matched its pinned SHA-256 checksum. Its local
+    full-history scan found no leaks, and GitHub Security run `32541642761` independently passed
+    checkout, checksum verification, and the full-history scan for release commit `8d51bdd`
 
 Exit: every production provider and public promise is configured and independently verified, but
 the launch switch still prevents Checkout creation.
 
 ## Phase 7 — Controlled cutover
 
-- [ ] Run `npm test`, `npm run check`, and `npm run build`; require all to pass, commit and push every
+- [x] Run `npm test`, `npm run check`, and `npm run build`; require all to pass, commit and push every
   recognized launch change, require CI to pass, and verify Git is clean
+  - From a fresh `npm ci`, all 45 tests, JavaScript syntax checking, the dotenv-isolated Wrangler
+    dry run, the full dependency audit, and `git diff --check` passed. The locked bundle remains
+    109.41 KiB compressed
+  - Release commit `8d51bdd` is pushed to `origin/codex/outcharity-v1`; GitHub CI passed, and draft
+    pull request `#1` targets `main` without enabling payments
 - [ ] Verify the immediate rollback: restore `OUTCHARITY_LAUNCH_APPROVED=false` and redeploy
 - [ ] Set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once, and verify `/health` reports
   `checkoutEnabled: true`

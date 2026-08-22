@@ -1,8 +1,7 @@
 # Outcharity session handoff
 
-This handoff is current through the locked Phase 6 production homepage deployment on 2026-08-21.
-It becomes stale when Phase 6 in `PLAN.md` progresses or the tracked working changes below are
-committed or replaced.
+This handoff is current through the locked production repository and CI gate on 2026-08-21. It
+becomes stale when Phase 6 or Phase 7 in `PLAN.md` progresses.
 
 ## Exact stop point
 
@@ -98,22 +97,46 @@ committed or replaced.
   behavior changed. Populated advertisers existed only in self-contained `/tmp` visual fixtures;
   no fixture row or asset entered production.
 
+## Repository release gate
+
+- Release commit `8d51bdd` contains every recognized locked-launch change and is pushed to
+  `origin/codex/outcharity-v1`. Draft pull request `#1` targets `main` at
+  `https://github.com/kserrec/outcharity/pull/1`; it has not been merged and does not enable
+  payments.
+- A fresh `npm ci` completed. All 45 tests, `npm run check`, `npm run build`, `npm audit`,
+  `npm audit --omit=dev`, and `git diff --check` pass. Both dependency audits report zero
+  vulnerabilities.
+- `package.json` now makes the standard production build pass `/dev/null` as Wrangler's environment
+  file. This prevents the release command from auto-loading a dotenv file and does not change the
+  generated Worker.
+- GitHub dependency alerts and automatic security updates are enabled, and the Dependabot alert
+  list is empty. The repository is private and user-owned; the current account does not offer
+  native secret scanning or push protection for that repository type, so neither could be enabled
+  without changing repository visibility or account features.
+- The checksum-pinned Gitleaks 8.30.1 archive matched SHA-256
+  `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`. A local full-history scan
+  found no leaks. GitHub Security run `32541642761` independently passed every step for release
+  commit `8d51bdd`.
+- `README.md` now describes the verified production resources, activated GoodAPI integration,
+  enabled Cloudflare analytics, current locked bundle, safe build command, and exact continuation
+  documents instead of the obsolete pre-production placeholders.
+
 ## Repository state
 
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch: `codex/outcharity-v1`
-- Last commit: `098242e Document wrapup stop point`
-- Tracked working changes: `PLAN.md`, `HANDOFF.md`, `public/_headers`, `public/styles.css`,
-  `src/http.js`, `src/views.js`, `test/config-and-views.test.js`, `test/security.test.js`, and
-  `wrangler.jsonc`.
-- No commit or push was performed during this session.
+- Application release commit: `8d51bdd Prepare locked production launch`
+- Remote branch: `origin/codex/outcharity-v1`
+- Draft pull request: `https://github.com/kserrec/outcharity/pull/1`
+- The working tree is clean after this state update is committed.
 - `wrangler.jsonc` keeps production `OUTCHARITY_LAUNCH_APPROVED` false and now contains only the
   approved non-secret production charity values. Never put provider secrets in that file.
 
 ## Resume sequence
 
 1. Read this file and Phase 6 of `PLAN.md`.
-2. Finish the Phase 6 email, provider-dashboard, repository-host, and secret-scanning checks in
-   plan order.
-3. Do not accept a live payment or change the launch flag until the corresponding
+2. Finish the Phase 6 email and provider-dashboard recheck.
+3. Continue Phase 7 at the immediate rollback verification; do not merge the draft pull request or
+   enable payments merely because the repository gate passed.
+4. Do not accept a live payment or change the launch flag until the corresponding
    Phase 6 or Phase 7 gate explicitly authorizes it.
