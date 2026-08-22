@@ -13,8 +13,9 @@ after the live Checkout Session probe). It becomes stale when Phase 7 in `PLAN.m
   3-D Secure, a $100,000 cap, rewritten Terms (refunds within 30 days, then final), logo
   dimension caps, IPv6 rate-limit buckets, invocation logs disabled, and 69 tests. `SECURITY.md`
   records the threat model and decisions. Kyle ruled that rank totals exclude refunded money
-  (migration 0003, committed, **not yet applied or deployed**). Resume there: apply 0003,
-  deploy, check `/health`; then Kyle's own live purchase test and first-delivery monitoring.
+  (migration 0003, applied and deployed as Worker version `0530675f-0de1-4370-b604-a6a4130a2120`
+  on 2026-08-22). Resume at Kyle's own live purchase test, then first-delivery monitoring about
+  30 days after that purchase.
 
 - Phase 6 is complete. Kyle confirmed receipt of the final `hello@outcharity.com` delivery test;
   the observed final Stripe status and the successful Stripe and GoodAPI production probes complete

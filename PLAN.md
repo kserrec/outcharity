@@ -330,8 +330,10 @@ the launch switch still prevents Checkout creation.
   refunded or disputed. Migration `0003_rank_totals_exclude_suspended.sql` recomputes
   `total_contributed_cents` on every confirmation and whenever a suspension is recorded or
   lifted; visibility after review remains a manual `is_hidden` update
-- [ ] Apply migration 0003 and deploy (same two commands as the hardening release), then confirm
+- [x] Apply migration 0003 and deploy (same two commands as the hardening release), then confirm
   `/health` still reports `checkoutEnabled: true`
+  - Done 2026-08-22: `No migrations to apply`; all five triggers present in production; Worker
+    version `0530675f-0de1-4370-b604-a6a4130a2120` at 100%; `/health` ok
 - [ ] Smoke-test the leaderboard, submission, management, success, legal, logo, sitemap, redirect,
   certificate, security-header, and mobile flows
 - [ ] Begin public launch promotion only after every check above passes; do not manufacture a live
