@@ -30,12 +30,12 @@ function completeEnvironment() {
   };
 }
 
-test('production configuration pins the approved campaign while checkout stays locked', () => {
+test('production configuration pins the approved live campaign', () => {
   const deployment = JSON.parse(
     readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
   );
 
-  assert.equal(deployment.vars.OUTCHARITY_LAUNCH_APPROVED, 'false');
+  assert.equal(deployment.vars.OUTCHARITY_LAUNCH_APPROVED, 'true');
   assert.equal(deployment.vars.CHARITY_NAME, 'St Jude Childrens Research Hospital');
   assert.equal(deployment.vars.CHARITY_URL, 'https://www.stjude.org');
   assert.equal(deployment.vars.CHARITY_EIN, '620646012');

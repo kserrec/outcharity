@@ -260,14 +260,26 @@ the launch switch still prevents Checkout creation.
   - `/health` returns `checkoutEnabled: false`, a production Checkout POST returns HTTP `503`, and a
     read-only D1 query reports zero advertisers, zero contributions, zero writes, and
     `changed_db: false`
-- [ ] Set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once, and verify `/health` reports
+- [x] Set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once, and verify `/health` reports
   `checkoutEnabled: true`
+  - Kyle explicitly authorized the source-of-truth flag change, matching test and documentation
+    updates, commit and push, and public live-Checkout deployment
+  - The exact pre-deploy diff changed only the non-secret launch flag and its production assertion.
+    The focused configuration suite passed 11/11; the full suite passed 45/45; syntax checking,
+    generated binding validation, `git diff --check`, and the 109.41 KiB compressed dry build passed
+    with the launch flag explicitly `true`
+  - Strict deployment created Worker version `377d3711-45b5-407a-8471-a0e2479197cb` with message
+    `Live Checkout enabled after explicit launch approval`; Cloudflare reports that version at 100%
+    of production traffic
+  - `/health` returns `checkoutEnabled: true`, the homepage exposes the live submission link, and
+    `/submit` returns HTTP `200`. A post-deploy read-only D1 query reports zero advertisers, zero
+    contributions, zero writes, and `changed_db: false`
 - [ ] Open a live Checkout Session through the website and stop before supplying a payment method;
   this verifies the live Stripe key without violating Stripe's prohibition on fake live-mode tests
 - [ ] Smoke-test the leaderboard, submission, management, success, legal, logo, sitemap, redirect,
   certificate, security-header, and mobile flows
-- [ ] Begin the launch only after every check above passes; do not manufacture a live purchase for
-  testing
+- [ ] Begin public launch promotion only after every check above passes; do not manufacture a live
+  purchase for testing
 - [ ] Monitor the first genuine advertiser purchase through Stripe, the signed webhook, D1,
   GoodAPI, cache invalidation, and the public leaderboard
 - [ ] Resend that genuine webhook once and verify the database and GoodAPI idempotency guarantees

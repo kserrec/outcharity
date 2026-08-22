@@ -48,7 +48,7 @@
     "crons": ["*/15 * * * *"]
   },
   "vars": {
-    "OUTCHARITY_LAUNCH_APPROVED": "false",
+    "OUTCHARITY_LAUNCH_APPROVED": "true",
     "SITE_URL": "https://outcharity.com",
     "CHARITY_NAME": "St Jude Childrens Research Hospital",
     "CHARITY_URL": "https://www.stjude.org",

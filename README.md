@@ -13,7 +13,7 @@ Outcharity is a public advertising leaderboard where rank is determined by confi
 
 The browser receives ordinary HTML and CSS. JavaScript is limited to amount shortcuts and copy/share controls.
 
-The locked production Worker bundle was 109.41 KiB compressed at the latest deployment. There are
+The live production Worker bundle is 109.41 KiB compressed at the launch deployment. There are
 two runtime packages: Hono supplies hardened routing and HTML escaping with no transitive packages,
 and Stripe's official library supplies Checkout and webhook-signature handling with no transitive
 packages. Wrangler is a development and deployment tool; it and its toolchain do not ship to
@@ -50,15 +50,15 @@ automatic injection for non-EU visitors, without adding an analytics package to 
 Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs are disabled. GitHub dependency alerts and automatic security updates are enabled. GitHub does not offer native secret scanning for this private repository under the current account features, so the checksum-pinned, MIT-licensed Gitleaks scanner checks full history on every push and pull request until native push protection becomes available.
 
 GoodAPI Donations is activated, the production charity record is verified, the live provider key
-is stored as a Worker secret, and the complete flow passed a disposable sandbox rehearsal. Keep
-`OUTCHARITY_LAUNCH_APPROVED=false` until the remaining Phase 6 checks and the explicit Phase 7
-cutover authorization are complete.
+is stored as a Worker secret, and the complete flow passed a disposable sandbox rehearsal. The
+explicit Phase 7 cutover authorization is complete, `OUTCHARITY_LAUNCH_APPROVED=true` is the
+version-controlled production setting, and the live health endpoint confirms Checkout is enabled.
 
 ## Current launch status
 
-Production is deployed at `https://outcharity.com`, but Checkout is deliberately locked. The
-current homepage presents an honest open #1 position because production has zero advertisers and
-zero contributions. `PLAN.md` is the durable launch checklist, and `HANDOFF.md` records the latest
+Production is live at `https://outcharity.com`, and genuine Stripe Checkout is enabled. The current
+homepage presents an honest open #1 position because production has zero advertisers and zero
+contributions. `PLAN.md` is the durable launch checklist, and `HANDOFF.md` records the latest
 deployment evidence and exact continuation point.
 
 ## Payment integrity

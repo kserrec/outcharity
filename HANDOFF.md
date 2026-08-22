@@ -1,18 +1,19 @@
 # Outcharity session handoff
 
-This handoff is current through the locked Phase 7 rollback rehearsal on 2026-08-21. It becomes
-stale when Phase 7 in `PLAN.md` progresses.
+This handoff is current through the live Phase 7 Checkout cutover on 2026-08-21. It becomes stale
+when Phase 7 in `PLAN.md` progresses.
 
 ## Exact stop point
 
 - Phase 6 is complete. Kyle confirmed receipt of the final `hello@outcharity.com` delivery test;
-  the already observed final Stripe status and the successful Stripe and GoodAPI production probes
-  complete the provider gate without making Kyle repeat those checks.
-- Resume at the next unfinished Phase 7 item: set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once,
-  and verify `/health`. This opens live Stripe Checkout to the public and therefore requires Kyle's
-  explicit authorization immediately before deployment.
-- Production remains deliberately locked. `https://outcharity.com/health` most recently returned
-  `{"ok":true,"checkoutEnabled":false}`, and a direct Checkout POST returned HTTP `503`.
+  the observed final Stripe status and the successful Stripe and GoodAPI production probes complete
+  the provider gate without making Kyle repeat those checks.
+- Kyle explicitly authorized the complete live-launch change boundary. Production Worker version
+  `377d3711-45b5-407a-8471-a0e2479197cb` now receives 100% of traffic, and
+  `https://outcharity.com/health` returns `{"ok":true,"checkoutEnabled":true}`.
+- Resume at the next unfinished Phase 7 item: open one live Checkout Session through the public
+  website and stop before supplying a payment method. This creates a real live-mode Stripe Checkout
+  Session but must not create a payment, contribution, advertiser, or charity donation.
 
 ## Completed external setup and rehearsal
 
@@ -113,6 +114,25 @@ stale when Phase 7 in `PLAN.md` progresses.
   Checkout POST returns HTTP `503`. A subsequent read-only D1 query reports zero advertisers, zero
   contributions, zero changes, zero rows written, and `changed_db: false`.
 
+## Live Checkout cutover
+
+- Kyle explicitly authorized changing the version-controlled production flag, updating its exact
+  test and launch documentation, committing and pushing the result, and opening genuine public
+  Stripe Checkout.
+- The exact pre-deploy executable diff changed only `OUTCHARITY_LAUNCH_APPROVED` from `false` to
+  `true`; no application logic, campaign wording, allocation, secret, provider configuration, or
+  database schema changed. The production assertion was updated to require the live value.
+- The focused configuration suite passed 11/11 and the full suite passed 45/45. JavaScript syntax
+  checking, generated Cloudflare binding validation, `git diff --check`, and the production dry
+  build passed; the dry build was 109.41 KiB compressed and explicitly listed the launch flag as
+  `true`.
+- Strict deployment published Worker version `377d3711-45b5-407a-8471-a0e2479197cb` with message
+  `Live Checkout enabled after explicit launch approval`. It receives 100% of production traffic,
+  has 6 ms startup, and uploaded no changed asset file.
+- Live `/health` returns `{"ok":true,"checkoutEnabled":true}`, the homepage renders its live
+  `Get on the board` link, and `/submit` returns HTTP `200`. A subsequent read-only D1 query reports
+  zero advertisers, zero contributions, zero changes, zero rows written, and `changed_db: false`.
+
 ## Repository release gate
 
 - Release commit `8d51bdd` contains every recognized locked-launch change and is pushed to
@@ -141,18 +161,19 @@ stale when Phase 7 in `PLAN.md` progresses.
 
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch: `codex/outcharity-v1`
-- Application release commit: `8d51bdd Prepare locked production launch`
+- Locked application release commit: `8d51bdd Prepare locked production launch`
+- Live cutover commit: this state update, with subject `Enable live Outcharity checkout`
 - Remote branch: `origin/codex/outcharity-v1`
 - Draft pull request: `https://github.com/kserrec/outcharity/pull/1`
 - The working tree is clean after this state update is committed.
-- `wrangler.jsonc` keeps production `OUTCHARITY_LAUNCH_APPROVED` false and now contains only the
-  approved non-secret production charity values. Never put provider secrets in that file.
+- `wrangler.jsonc` sets production `OUTCHARITY_LAUNCH_APPROVED` true and contains only the approved
+  non-secret production charity values. Never put provider secrets in that file.
 
 ## Resume sequence
 
 1. Read this file and Phase 7 of `PLAN.md`.
-2. Obtain Kyle's explicit authorization to open live Checkout; state plainly that this permits real
-   visitors to proceed to Stripe and make real payments.
-3. Set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once, and verify `/health` reports checkout enabled.
-4. Continue Phase 7 in order. Do not merge the draft pull request merely because the locked gates
-   passed, and do not manufacture a live payment for testing.
+2. Open one live Checkout Session through `https://outcharity.com` and stop before supplying a
+   payment method; do not complete a fake live-mode purchase.
+3. Verify that the abandoned session did not create a production advertiser, contribution, or
+   GoodAPI donation, then continue the Phase 7 smoke tests in order.
+4. Do not begin public promotion or merge the draft pull request merely because Checkout is open.
