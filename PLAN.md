@@ -274,8 +274,16 @@ the launch switch still prevents Checkout creation.
   - `/health` returns `checkoutEnabled: true`, the homepage exposes the live submission link, and
     `/submit` returns HTTP `200`. A post-deploy read-only D1 query reports zero advertisers, zero
     contributions, zero writes, and `changed_db: false`
-- [ ] Open a live Checkout Session through the website and stop before supplying a payment method;
+- [x] Open a live Checkout Session through the website and stop before supplying a payment method;
   this verifies the live Stripe key without violating Stripe's prohibition on fake live-mode tests
+  - Kyle submitted the real public form and Stripe's live Checkout page opened. He supplied no
+    payment details, made no payment attempt, and incurred no charge
+  - A subsequent read-only production D1 query returned zero advertisers and zero contributions;
+    Cloudflare reported `changes: 0`, `rows_written: 0`, and `changed_db: false`. Fulfillment and
+    GoodAPI delivery therefore did not begin
+  - The uploaded logo remains temporary until Stripe expires the unpaid Session. The signed
+    `checkout.session.expired` handler is designed and tested to delete that unused logo; its
+    production delivery and deletion have not yet been observed
 - [ ] Smoke-test the leaderboard, submission, management, success, legal, logo, sitemap, redirect,
   certificate, security-header, and mobile flows
 - [ ] Begin public launch promotion only after every check above passes; do not manufacture a live

@@ -1,7 +1,7 @@
 # Outcharity session handoff
 
-This handoff is current through the live Phase 7 Checkout cutover on 2026-08-21. It becomes stale
-when Phase 7 in `PLAN.md` progresses.
+This handoff is current through the live Phase 7 Checkout Session probe on 2026-08-21. It becomes
+stale when Phase 7 in `PLAN.md` progresses.
 
 ## Exact stop point
 
@@ -11,9 +11,11 @@ when Phase 7 in `PLAN.md` progresses.
 - Kyle explicitly authorized the complete live-launch change boundary. Production Worker version
   `377d3711-45b5-407a-8471-a0e2479197cb` now receives 100% of traffic, and
   `https://outcharity.com/health` returns `{"ok":true,"checkoutEnabled":true}`.
-- Resume at the next unfinished Phase 7 item: open one live Checkout Session through the public
-  website and stop before supplying a payment method. This creates a real live-mode Stripe Checkout
-  Session but must not create a payment, contribution, advertiser, or charity donation.
+- Kyle submitted the real public form and reached Stripe's live Checkout page, then stopped without
+  supplying payment details. A subsequent read-only production D1 query returned zero advertisers,
+  zero contributions, zero writes, and `changed_db: false`; no payment or charge occurred.
+- Resume at the next unfinished Phase 7 item: smoke-test the leaderboard, submission, management,
+  success, legal, logo, sitemap, redirect, certificate, security-header, and mobile flows.
 
 ## Completed external setup and rehearsal
 
@@ -61,12 +63,12 @@ when Phase 7 in `PLAN.md` progresses.
   `d247957b-709e-4102-b446-fec279df64f6`. Production now returns
   `Referrer-Policy: same-origin`, while Checkout remains locked.
 
-## Locked production campaign
+## Production campaign
 
 - `wrangler.jsonc` now contains the approved non-secret campaign record:
   `St Jude Childrens Research Hospital`, EIN `620646012`, `https://www.stjude.org`, the generic
   `Buy the top spot. Help the featured charity.` headline, and the literal non-affiliation/90/10/
-  processing-fee disclosure. The launch flag remains `false`.
+  processing-fee disclosure. The launch flag is now `true` following Kyle's authorized cutover.
 - The approved refund and dispute policy is live on `/terms`. It promises full Stripe refunds to
   the original payment method when owed, keeps rank changes and policy-violating listings
   nonrefundable, makes Outcharity bear unrecoverable charity/provider costs, and does not imply
@@ -132,13 +134,22 @@ when Phase 7 in `PLAN.md` progresses.
 - Live `/health` returns `{"ok":true,"checkoutEnabled":true}`, the homepage renders its live
   `Get on the board` link, and `/submit` returns HTTP `200`. A subsequent read-only D1 query reports
   zero advertisers, zero contributions, zero changes, zero rows written, and `changed_db: false`.
+- Kyle submitted the real public form and Stripe's live Checkout page opened. He entered no payment
+  details and completed no payment. This verifies that the restricted live Stripe key can create
+  the intended Checkout Session without making a prohibited fake live-mode purchase.
+- The post-Session production D1 query still reports zero advertisers and zero contributions;
+  Cloudflare reports `changes: 0`, `rows_written: 0`, and `changed_db: false`. Because fulfillment
+  did not create a contribution, the application did not enter its GoodAPI-delivery path.
+- The form uploaded a temporary logo before creating the Session. Its production deletion has not
+  yet been observed; the signed `checkout.session.expired` handler is designed and covered by a
+  focused test to delete an unused new-listing logo after Stripe expires the unpaid Session.
 
 ## Repository release gate
 
 - Release commit `8d51bdd` contains every recognized locked-launch change and is pushed to
   `origin/codex/outcharity-v1`. Draft pull request `#1` targets `main` at
-  `https://github.com/kserrec/outcharity/pull/1`; it has not been merged and does not enable
-  payments.
+  `https://github.com/kserrec/outcharity/pull/1`; it has not been merged. Its source branch now
+  includes live-cutover commit `4ba8856`, which enables payments in the deployed configuration.
 - A fresh `npm ci` completed. All 45 tests, `npm run check`, `npm run build`, `npm audit`,
   `npm audit --omit=dev`, and `git diff --check` pass. Both dependency audits report zero
   vulnerabilities.
@@ -162,7 +173,7 @@ when Phase 7 in `PLAN.md` progresses.
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch: `codex/outcharity-v1`
 - Locked application release commit: `8d51bdd Prepare locked production launch`
-- Live cutover commit: this state update, with subject `Enable live Outcharity checkout`
+- Live cutover commit: `4ba8856 Enable live Outcharity checkout`
 - Remote branch: `origin/codex/outcharity-v1`
 - Draft pull request: `https://github.com/kserrec/outcharity/pull/1`
 - The working tree is clean after this state update is committed.
@@ -172,8 +183,8 @@ when Phase 7 in `PLAN.md` progresses.
 ## Resume sequence
 
 1. Read this file and Phase 7 of `PLAN.md`.
-2. Open one live Checkout Session through `https://outcharity.com` and stop before supplying a
-   payment method; do not complete a fake live-mode purchase.
-3. Verify that the abandoned session did not create a production advertiser, contribution, or
-   GoodAPI donation, then continue the Phase 7 smoke tests in order.
+2. Run the Phase 7 smoke tests for the leaderboard, submission, management, success, legal, logo,
+   sitemap, redirect, certificate, security-header, and mobile flows.
+3. Observe the unpaid Checkout Session's eventual Stripe expiration webhook and confirm that its
+   temporary new-listing logo is removed without creating a financial record.
 4. Do not begin public promotion or merge the draft pull request merely because Checkout is open.
