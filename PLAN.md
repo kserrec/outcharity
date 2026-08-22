@@ -284,7 +284,7 @@ the launch switch still prevents Checkout creation.
   - The uploaded logo remains temporary until Stripe expires the unpaid Session. The signed
     `checkout.session.expired` handler is designed and tested to delete that unused logo; its
     production delivery and deletion have not yet been observed
-- [ ] **Before deploying the audit fixes**, subscribe the production Stripe webhook endpoint to the
+- [x] **Before deploying the audit fixes**, subscribe the production Stripe webhook endpoint to the
   two listing-suspension events added by the 2026-08-21 audit (Kyle, Stripe Dashboard). The
   updated Terms promise automatic hiding, so the subscription must exist before that text goes
   live. In Stripe → Developers → Webhooks → the
@@ -292,7 +292,8 @@ the launch switch still prevents Checkout creation.
   `charge.dispute.created` and `charge.refunded`, then save. Done looks like: the endpoint's event
   list shows five events (the three Checkout Session events plus these two). Until this is done,
   a refund or dispute does not hide its listing automatically and must be hidden by hand
-- [ ] Deploy the 2026-08-21 audit fixes (`SECURITY.md` lists them): first confirm
+  - Done 2026-08-22: the Workbench endpoint row now lists 5 events
+- [x] Deploy the 2026-08-21 audit fixes (`SECURITY.md` lists them): first confirm
   `npx wrangler d1 migrations list outcharity --remote` shows `0001_initial.sql` as already
   applied and only `0002_payment_suspensions.sql` pending, then run the new D1 migration
   `0002_payment_suspensions.sql` against production (`npx wrangler d1 migrations apply outcharity
@@ -301,7 +302,10 @@ the launch switch still prevents Checkout creation.
   ships the new `CHARITY_HOLD_DAYS=30` setting, the $100,000 cap, mandatory 3-D Secure at
   checkout, and the Terms that make payments final after thirty days. From then on the 15-minute
   task sends each charity share thirty days after its payment; check GoodAPI's dashboard a month
-  after the first real purchase to confirm the first delivery. The deploy also turns off Cloudflare invocation logs, so the
+  after the first real purchase to confirm the first delivery.
+  - Done 2026-08-22: `0002_payment_suspensions.sql` applied (`No migrations to apply`), Worker
+    version `b4146d3f-1133-4827-ae64-ce9712e2dff9` at 100%, `/health` returns
+    `{"ok":true,"checkoutEnabled":true}`, `/terms` serves the 30-day wording, HSTS/CSP present The deploy also turns off Cloudflare invocation logs, so the
   Workers Logs view afterwards shows only the Worker's own `console.error` lines
 - Test audit, 2026-08-21: 34 product mutations run against the suite; every test that was mutated
   against caught its failure. Seven proven gaps (cross-origin form posts, cron wiring, homepage

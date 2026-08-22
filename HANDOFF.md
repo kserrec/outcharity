@@ -5,14 +5,15 @@ after the live Checkout Session probe). It becomes stale when Phase 7 in `PLAN.m
 
 ## Exact stop point
 
-- **Production still runs the pre-hardening Worker.** The committed tree adds: a 30-day charity
+- **Production now runs the hardened Worker** (`b4146d3f-1133-4827-ae64-ce9712e2dff9`, deployed
+  2026-08-22 after the Stripe endpoint gained `charge.dispute.created`/`charge.refunded` and
+  migration 0002 was applied). The release adds: a 30-day charity
   delivery hold with refund/dispute suspensions (new D1 migration `0002_payment_suspensions.sql`),
   automatic hiding of refunded or disputed listings, a live-mode-only production rule, mandatory
   3-D Secure, a $100,000 cap, rewritten Terms (refunds within 30 days, then final), logo
   dimension caps, IPv6 rate-limit buckets, invocation logs disabled, and 69 tests. `SECURITY.md`
-  records the threat model and decisions. Deploy order is the Phase 7 checklist in `PLAN.md`:
-  subscribe `charge.dispute.created` and `charge.refunded` on the Stripe endpoint, apply the
-  migration, deploy, check `/health`.
+  records the threat model and decisions. Resume at the next unfinished Phase 7 item: Kyle's
+  rank-total ruling, then the public smoke test and first-purchase monitoring.
 
 - Phase 6 is complete. Kyle confirmed receipt of the final `hello@outcharity.com` delivery test;
   the observed final Stripe status and the successful Stripe and GoodAPI production probes complete
