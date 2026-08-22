@@ -1,9 +1,18 @@
 # Outcharity session handoff
 
-This handoff is current through the live Phase 7 Checkout Session probe on 2026-08-21. It becomes
-stale when Phase 7 in `PLAN.md` progresses.
+This handoff is current through the 2026-08-21 hardening release (commit on `codex/outcharity-v1`
+after the live Checkout Session probe). It becomes stale when Phase 7 in `PLAN.md` progresses.
 
 ## Exact stop point
+
+- **Production still runs the pre-hardening Worker.** The committed tree adds: a 30-day charity
+  delivery hold with refund/dispute suspensions (new D1 migration `0002_payment_suspensions.sql`),
+  automatic hiding of refunded or disputed listings, a live-mode-only production rule, mandatory
+  3-D Secure, a $100,000 cap, rewritten Terms (refunds within 30 days, then final), logo
+  dimension caps, IPv6 rate-limit buckets, invocation logs disabled, and 69 tests. `SECURITY.md`
+  records the threat model and decisions. Deploy order is the Phase 7 checklist in `PLAN.md`:
+  subscribe `charge.dispute.created` and `charge.refunded` on the Stripe endpoint, apply the
+  migration, deploy, check `/health`.
 
 - Phase 6 is complete. Kyle confirmed receipt of the final `hello@outcharity.com` delivery test;
   the observed final Stripe status and the successful Stripe and GoodAPI production probes complete

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 class TestStatement {
@@ -29,11 +29,10 @@ class TestStatement {
 export class TestD1Database {
   constructor() {
     this.database = new DatabaseSync(':memory:');
-    const migration = readFileSync(
-      new URL('../../db/migrations/0001_initial.sql', import.meta.url),
-      'utf8',
-    );
-    this.database.exec(migration);
+    const directory = new URL('../../db/migrations/', import.meta.url);
+    for (const name of readdirSync(directory).filter((file) => file.endsWith('.sql')).sort()) {
+      this.database.exec(readFileSync(new URL(name, directory), 'utf8'));
+    }
   }
 
   prepare(sql) {

@@ -8,6 +8,10 @@ import {
   requireRateLimit,
 } from '../src/http.js';
 import { app } from '../src/index.js';
+import {
+  configuredEnvironment as launchEnvironment,
+  executionContext,
+} from './helpers/environment.js';
 
 function requestStream(byteCounts, hooks = {}) {
   const chunks = byteCounts.map((count) => new Uint8Array(count).fill(97));
@@ -32,35 +36,6 @@ function postRequest(url, byteCounts, headers = {}, hooks = {}) {
     duplex: 'half',
   });
 }
-
-function launchEnvironment(overrides = {}) {
-  return {
-    OUTCHARITY_LAUNCH_APPROVED: 'true',
-    SITE_URL: 'https://outcharity.com',
-    CHARITY_NAME: 'Example Charity',
-    CHARITY_URL: 'https://charity.example',
-    CHARITY_EIN: '12-3456789',
-    CHARITY_DISCLOSURE: 'Approved disclosure.',
-    CAMPAIGN_HEADLINE: 'Buy the top spot. Help people.',
-    CHARITY_PERCENTAGE: '90',
-    PLATFORM_PERCENTAGE: '10',
-    MIN_CONTRIBUTION_CENTS: '1000',
-    MAX_CONTRIBUTION_CENTS: '100000000',
-    STRIPE_SECRET_KEY: 'configured',
-    STRIPE_WEBHOOK_SECRET: 'configured',
-    GOODAPI_API_KEY: 'configured',
-    DB: {},
-    LOGOS: {},
-    CHECKOUT_RATE_LIMITER: { async limit() { return { success: true }; } },
-    LOOKUP_RATE_LIMITER: { async limit() { return { success: true }; } },
-    ...overrides,
-  };
-}
-
-const executionContext = {
-  waitUntil() {},
-  passThroughOnException() {},
-};
 
 test('the bounded body reader enforces actual streamed bytes, not just Content-Length', async () => {
   const exact = postRequest('https://outcharity.com/probe', [4, 6]);
@@ -397,6 +372,9 @@ test('deployment disables alternate public hosts and hardens static assets', () 
     { pattern: 'outcharity.com', custom_domain: true },
   ]);
   assert.deepEqual(wrangler.triggers?.crons, ['*/15 * * * *']);
+  // Management links carry their credential in the URL; per-request invocation logs would
+  // record those URLs, so only the Worker's own console output may be collected.
+  assert.equal(wrangler.observability?.logs?.invocation_logs, false);
 
   const staticHeaders = readFileSync(
     new URL('../public/_headers', import.meta.url),
@@ -566,4 +544,115 @@ test('unconfirmed or hidden logos are not served and visible-logo caching is rev
     'public, max-age=60, s-maxage=60, must-revalidate',
   );
   assert.doesNotMatch(visibleResponse.headers.get('Cache-Control'), /immutable|31536000/);
+});
+
+test('rate limiting buckets an IPv6 client by its /64 block and keeps IPv4 exact', async () => {
+  const keys = [];
+  const limiter = { async limit({ key }) { keys.push(key); return { success: true }; } };
+  const addresses = [
+    '2001:db8:abcd:1234::1',
+    '2001:db8:abcd:1234::2',
+    '2001:DB8:ABCD:1234:ffff:ffff:ffff:ffff',
+    '2001:0db8:abcd:1234:0000:0000:0000:0003',
+    '2001:db8:abcd:1234:5::',
+    '2001:db8:abcd:1235::1',
+    '203.0.113.9',
+    '203.0.113.10',
+    '::ffff:203.0.113.9',
+    '1::2::3',
+    '',
+    'garbage::zz',
+  ];
+  for (const address of addresses) {
+    await requireRateLimit(
+      new Request('https://outcharity.com/probe', { headers: { 'CF-Connecting-IP': address } }),
+      limiter,
+      'probe',
+    );
+  }
+  assert.deepEqual(keys, [
+    'probe:2001:0db8:abcd:1234::/64',
+    'probe:2001:0db8:abcd:1234::/64',
+    'probe:2001:0db8:abcd:1234::/64',
+    'probe:2001:0db8:abcd:1234::/64',
+    'probe:2001:0db8:abcd:1234::/64',
+    'probe:2001:0db8:abcd:1235::/64',
+    'probe:203.0.113.9',
+    'probe:203.0.113.10',
+    'probe:203.0.113.9',
+    'probe:invalid',
+    'probe:unknown',
+    'probe:invalid',
+  ]);
+});
+
+test('unreadable or wrongly typed form bodies are refused with 400, not a server error', async (context) => {
+  const errors = context.mock.method(console, 'error', () => {});
+  const environment = launchEnvironment();
+  const cases = [
+    { 'Content-Type': 'application/json', body: '{"name":"x"}' },
+    { 'Content-Type': 'text/plain', body: 'name=x' },
+    { 'Content-Type': 'multipart/form-data; boundary=zz', body: 'not multipart at all' },
+    { 'Content-Type': 'multipart/form-data', body: '--x\r\n' },
+    { body: 'name=x' },
+  ];
+  for (const { body, ...headers } of cases) {
+    const response = await app.request(
+      'https://outcharity.com/checkout',
+      { method: 'POST', headers: { Origin: 'https://outcharity.com', ...headers }, body },
+      environment,
+      executionContext,
+    );
+    assert.equal(response.status, 400, JSON.stringify(headers));
+  }
+  assert.equal(errors.mock.callCount(), 0);
+
+  const urlEncoded = await app.request(
+    'https://outcharity.com/manage/aa'.padEnd(31 + 64, 'a') + '/checkout',
+    {
+      method: 'POST',
+      headers: { Origin: 'https://outcharity.com', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'amount=10',
+    },
+    { ...environment, DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } },
+    executionContext,
+  );
+  assert.equal(urlEncoded.status, 404, 'url-encoded bodies still parse');
+});
+
+test('form posts from another site or with no Origin are refused before any downstream work', async () => {
+  const environment = launchEnvironment({
+    DB: { prepare() { throw new Error('the database must not be reached'); } },
+    LOGOS: { async put() { throw new Error('R2 must not be reached'); } },
+    CHECKOUT_RATE_LIMITER: { async limit() { throw new Error('rate limiting must not run'); } },
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('Stripe must not be reached'); };
+  try {
+    for (const path of ['/checkout', `/manage/${'a'.repeat(64)}/checkout`]) {
+      for (const origin of [
+        'https://evil.example',
+        'http://outcharity.com',
+        'https://outcharity.com.evil.example',
+        'https://outcharity.com:8443',
+        'https://www.outcharity.com',
+        'null',
+        undefined,
+      ]) {
+        const response = await app.fetch(
+          postRequest(`https://outcharity.com${path}`, [20], {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            ...(origin === undefined ? {} : { Origin: origin }),
+          }),
+          environment,
+          executionContext,
+        );
+        // The environment throws on any database, storage, limiter, or Stripe use, so a 403
+        // (rather than a 500) proves the request was refused before downstream work.
+        assert.equal(response.status, 403, `${path} Origin=${origin}`);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

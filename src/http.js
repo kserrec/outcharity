@@ -1,5 +1,7 @@
-const SECURITY_HEADERS = {
-  'Content-Security-Policy': [
+const ANALYTICS_SCRIPT_SOURCE = 'https://static.cloudflareinsights.com';
+
+function contentSecurityPolicy({ allowAnalytics = true } = {}) {
+  return [
     "default-src 'self'",
     "base-uri 'none'",
     "connect-src 'self'",
@@ -8,9 +10,13 @@ const SECURITY_HEADERS = {
     "frame-ancestors 'none'",
     "img-src 'self' data:",
     "object-src 'none'",
-    "script-src 'self' https://static.cloudflareinsights.com",
+    `script-src 'self'${allowAnalytics ? ` ${ANALYTICS_SCRIPT_SOURCE}` : ''}`,
     "style-src 'self'",
-  ].join('; '),
+  ].join('; ');
+}
+
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': contentSecurityPolicy(),
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Permissions-Policy': 'camera=(), geolocation=(), microphone=()',
   'Referrer-Policy': 'same-origin',
@@ -18,9 +24,26 @@ const SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY',
 };
 
-export function applySecurityHeaders(response, { strictTransport = false } = {}) {
+export function applySecurityHeaders(
+  response,
+  { strictTransport = false, privateResponse = false } = {},
+) {
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(name, value);
+  }
+  if (privateResponse) {
+    response.headers.set('Content-Security-Policy', contentSecurityPolicy({ allowAnalytics: false }));
+    response.headers.set('Referrer-Policy', 'origin');
+    response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    const cacheControl = response.headers.get('Cache-Control');
+    response.headers.set(
+      'Cache-Control',
+      cacheControl?.includes('no-transform')
+        ? cacheControl
+        : cacheControl
+          ? `${cacheControl}, no-transform`
+          : 'no-store, no-transform',
+    );
   }
   if (strictTransport) {
     response.headers.set('Strict-Transport-Security', 'max-age=31536000');
@@ -28,7 +51,11 @@ export function applySecurityHeaders(response, { strictTransport = false } = {})
   return response;
 }
 
-function isLocalHostname(hostname) {
+export function isPrivatePath(pathname) {
+  return pathname === '/success' || pathname === '/manage-return' || pathname.startsWith('/manage/');
+}
+
+export function isLocalHostname(hostname) {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
@@ -86,6 +113,29 @@ function isLocalRequest(request) {
   return isLocalHostname(new URL(request.url).hostname);
 }
 
+// IPv6 networks hand each customer a whole /64 block, so a single client must share one bucket
+// across that block rather than getting a fresh limit per address.
+export function rateLimitClientKey(address) {
+  const source = String(address || '').trim().toLowerCase();
+  if (!source) return 'unknown';
+  if (!source.includes(':')) return source.slice(0, 64);
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(source);
+  if (mapped) return mapped[1];
+  const parts = source.split('::');
+  if (parts.length > 2) return 'invalid';
+  const [head, tail = ''] = parts;
+  const groups = head ? head.split(':') : [];
+  if (tail !== '' || source.endsWith('::')) {
+    const tailGroups = tail ? tail.split(':') : [];
+    while (groups.length + tailGroups.length < 8) groups.push('0');
+    groups.push(...tailGroups);
+  }
+  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) {
+    return 'invalid';
+  }
+  return `${groups.slice(0, 4).map((group) => group.padStart(4, '0')).join(':')}::/64`;
+}
+
 export async function requireRateLimit(request, limiter, scope) {
   if (!limiter?.limit) {
     if (isLocalRequest(request)) return;
@@ -95,7 +145,7 @@ export async function requireRateLimit(request, limiter, scope) {
     throw error;
   }
 
-  const clientAddress = (request.headers.get('CF-Connecting-IP') || 'unknown').slice(0, 64);
+  const clientAddress = rateLimitClientKey(request.headers.get('CF-Connecting-IP'));
   const { success } = await limiter.limit({ key: `${scope}:${clientAddress}` });
   if (!success) {
     await request.body?.cancel();
@@ -152,10 +202,24 @@ export async function readBodyWithinLimit(request, maximumBytes) {
   return body.subarray(0, totalBytes);
 }
 
+function unreadableForm() {
+  const error = new Error('That submission could not be read. Please use the form on this site.');
+  error.status = 400;
+  return error;
+}
+
 export async function readFormDataWithinLimit(request, maximumBytes) {
-  const body = await readBodyWithinLimit(request, maximumBytes);
   const contentType = request.headers.get('Content-Type') || '';
-  return new Response(body, { headers: { 'Content-Type': contentType } }).formData();
+  if (!/^(?:multipart\/form-data|application\/x-www-form-urlencoded)\s*(?:;|$)/i.test(contentType)) {
+    await request.body?.cancel();
+    throw unreadableForm();
+  }
+  const body = await readBodyWithinLimit(request, maximumBytes);
+  try {
+    return await new Response(body, { headers: { 'Content-Type': contentType } }).formData();
+  } catch {
+    throw unreadableForm();
+  }
 }
 
 export async function readTextWithinLimit(request, maximumBytes) {
@@ -164,25 +228,38 @@ export async function readTextWithinLimit(request, maximumBytes) {
 
 export async function htmlResponse(context, document, status = 200, cacheControl = 'no-store') {
   const response = await context.html(document, status);
-  response.headers.set('Cache-Control', cacheControl);
-  return applySecurityHeaders(response);
+  response.headers.set(
+    'Cache-Control',
+    isPrivatePath(new URL(context.req.url).pathname) ? `${cacheControl}, no-transform` : cacheControl,
+  );
+  return response;
 }
 
-export function publicCacheKey(request) {
+function cacheKeyFor(request, pathname = new URL(request.url).pathname) {
   const url = new URL(request.url);
-  url.pathname = '/';
-  url.search = '';
-  return new Request(url.toString(), { method: 'GET' });
-}
-
-export function publicAssetCacheKey(request) {
-  const url = new URL(request.url);
+  url.pathname = pathname;
   url.search = '';
   url.hash = '';
   return new Request(url.toString(), { method: 'GET' });
 }
 
-export async function invalidatePublicHomepage(request) {
+export function publicCacheKey(request) {
+  return cacheKeyFor(request, '/');
+}
+
+export function publicAssetCacheKey(request) {
+  return cacheKeyFor(request);
+}
+
+async function invalidateCacheKey(key) {
   if (!globalThis.caches?.default) return false;
-  return globalThis.caches.default.delete(publicCacheKey(request));
+  return globalThis.caches.default.delete(key);
+}
+
+export function invalidatePublicHomepage(request) {
+  return invalidateCacheKey(publicCacheKey(request));
+}
+
+export function invalidatePublicLogo(request, logoKey) {
+  return invalidateCacheKey(cacheKeyFor(request, `/${logoKey}`));
 }

@@ -67,8 +67,13 @@ deployment evidence and exact continuation point.
 - The Checkout Session ID is unique, so duplicate webhook delivery counts once.
 - Advertiser totals are recalculated by a database trigger inside the same transactional batch.
 - Confirmed financial fields cannot be updated or deleted.
+- The charity share is held for `CHARITY_HOLD_DAYS` (30) after payment and then sent by the 15-minute scheduled task; a payment refunded or disputed inside that window sends nothing to charity. Failed deliveries are logged and retried on later runs.
 - Charity delivery uses the Checkout Session ID as the provider idempotency key.
-- Failed charity deliveries are logged, returned as webhook failures for Stripe retry, and retried by the 15-minute scheduled task.
+- Checkout requests 3-D Secure authentication on every card payment (`request_three_d_secure: 'any'`). When the issuer supports it, fraud-chargeback liability for that payment sits with the card issuer under card-network rules; cards not enrolled in 3-D Secure proceed without it and remain the one residual fraud exposure.
 - Expired new-listing Checkout Sessions delete their unused uploaded logos.
 - Logos are served only for confirmed, visible advertisers and cached for at most one minute, so hiding a listing also revokes its public image promptly.
 - Public leaderboard HTML is cached for five seconds; successful webhook insertion invalidates the local edge copy immediately.
+- A signed `charge.refunded` or `charge.dispute.created` event hides the affected listing and invalidates the local edge copies of the homepage and logo; the payment record is never altered. A suspension that arrives before the payment's confirmation is stored and applied when the confirmation lands, and a suspended payment never sends money to charity.
+- Outside local development, checkout requires a live-mode Stripe key and the webhook refuses non-live events, so a test-mode configuration can never create a live listing or charity delivery.
+
+`SECURITY.md` records the threat model, the accepted trust decisions, and the audit history.

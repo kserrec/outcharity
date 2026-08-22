@@ -284,6 +284,49 @@ the launch switch still prevents Checkout creation.
   - The uploaded logo remains temporary until Stripe expires the unpaid Session. The signed
     `checkout.session.expired` handler is designed and tested to delete that unused logo; its
     production delivery and deletion have not yet been observed
+- [ ] **Before deploying the audit fixes**, subscribe the production Stripe webhook endpoint to the
+  two listing-suspension events added by the 2026-08-21 audit (Kyle, Stripe Dashboard). The
+  updated Terms promise automatic hiding, so the subscription must exist before that text goes
+  live. In Stripe → Developers → Webhooks → the
+  `https://outcharity.com/webhooks/stripe` endpoint → "Update details" / "Select events", add
+  `charge.dispute.created` and `charge.refunded`, then save. Done looks like: the endpoint's event
+  list shows five events (the three Checkout Session events plus these two). Until this is done,
+  a refund or dispute does not hide its listing automatically and must be hidden by hand
+- [ ] Deploy the 2026-08-21 audit fixes (`SECURITY.md` lists them): first confirm
+  `npx wrangler d1 migrations list outcharity --remote` shows `0001_initial.sql` as already
+  applied and only `0002_payment_suspensions.sql` pending, then run the new D1 migration
+  `0002_payment_suspensions.sql` against production (`npx wrangler d1 migrations apply outcharity
+  --remote`) before `npx wrangler deploy`, then confirm `/health` still reports
+  `checkoutEnabled: true` (the live key passes the new live-mode-only rule). The deploy also
+  ships the new `CHARITY_HOLD_DAYS=30` setting, the $100,000 cap, mandatory 3-D Secure at
+  checkout, and the Terms that make payments final after thirty days. From then on the 15-minute
+  task sends each charity share thirty days after its payment; check GoodAPI's dashboard a month
+  after the first real purchase to confirm the first delivery. The deploy also turns off Cloudflare invocation logs, so the
+  Workers Logs view afterwards shows only the Worker's own `console.error` lines
+- Test audit, 2026-08-21: 34 product mutations run against the suite; every test that was mutated
+  against caught its failure. Seven proven gaps (cross-origin form posts, cron wiring, homepage
+  purge on a new payment, orphaned logo when Stripe fails, GoodAPI timeout, wrong-token cookie on
+  the success page, mode guard) now have tests; a cold review strengthened four of them. Left as
+  notes, not tests: webhook fulfillment failures could stop logging with no test noticing (no
+  promise covers logging); `/success` compares `advertiser_id` to the contribution before the
+  token-hash check, which already decides the outcome — redundant code for a refactor pass; the
+  mobile-CSS regex test pins exact stylesheet text and will fail on innocent CSS edits (Kyle's
+  call whether to narrow it)
+- Bug hunt, 2026-08-21: five confirmed defects fixed with tests — a submission showed only the
+  first invalid field, two parsers of `CHARITY_HOLD_DAYS` could disagree (Terms vs cron), the
+  homepage totals counted refunded or disputed money as "confirmed giving"/"to charity", an
+  outbid link could offer less than the minimum after the minimum is raised, and SECURITY.md
+  wrongly said form posts require the management cookie. A cold review then found two more,
+  also fixed: the suspension checks used `NOT IN` on a nullable column (a row with no payment
+  intent could vanish from totals or never be delivered; now `NOT EXISTS` plus `NOT NULL` on
+  `payment_suspensions`), and a zero-padded `CHARITY_HOLD_DAYS` such as `030` closed checkout
+  despite parsing correctly. Settled as not a bug: the strict GoodAPI `amount_cents` comparison
+  (the provider's OpenAPI spec declares an integer)
+- [ ] Kyle's ruling needed: a refunded or disputed payment stays inside the advertiser's own
+  `total_contributed_cents` (the rank total) because contribution rows are immutable; today that
+  only matters if Kyle un-hides such a listing by hand after review, when it would rank with
+  refunded dollars included. Options: leave as is and never un-hide a refunded listing, or
+  exclude suspended payments from the rank total too (a trigger change plus tests)
 - [ ] Smoke-test the leaderboard, submission, management, success, legal, logo, sitemap, redirect,
   certificate, security-header, and mobile flows
 - [ ] Begin public launch promotion only after every check above passes; do not manufacture a live

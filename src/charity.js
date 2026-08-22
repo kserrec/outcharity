@@ -3,6 +3,7 @@ import {
   markCharityDelivered,
   markCharityDeliveryFailed,
 } from './db.js';
+import { charityHoldDays } from './config.js';
 import { createGoodApiDonation } from './providers.js';
 
 export async function deliverCharityPortion(env, contribution, fetcher = fetch) {
@@ -21,10 +22,19 @@ export async function deliverCharityPortion(env, contribution, fetcher = fetch) 
   }
 }
 
-export async function retryUndeliveredCharityPortions(env, fetcher = fetch) {
+export async function deliverEligibleCharityPortions(
+  env,
+  fetcher = fetch,
+  { clockOffset = '+0 days' } = {},
+) {
   if (!env.DB || !env.GOODAPI_API_KEY) return { attempted: 0, delivered: 0 };
 
-  const contributions = await listUndeliveredContributions(env.DB);
+  const contributions = await listUndeliveredContributions(
+    env.DB,
+    25,
+    charityHoldDays(env),
+    clockOffset,
+  );
   let delivered = 0;
   for (const contribution of contributions) {
     try {

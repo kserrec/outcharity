@@ -4,7 +4,7 @@ import { amountInputValue, displayHost, formatMoney } from './domain.js';
 const SITE_DESCRIPTION =
   'Businesses compete for the top spot by giving to charity. Rank is determined by confirmed lifetime contributions.';
 
-function page(config, { title, description = SITE_DESCRIPTION, path = '/', body }) {
+function page(config, { title, description = SITE_DESCRIPTION, path = '/', body, privatePage = false }) {
   const fullTitle = title === 'Outcharity' ? 'Outcharity — Advertise by Giving' : `${title} — Outcharity`;
   const canonical = `${config.siteUrl}${path === '/' ? '' : path}`;
   const previewImage = `${config.siteUrl}/og.png`;
@@ -16,14 +16,16 @@ function page(config, { title, description = SITE_DESCRIPTION, path = '/', body 
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${fullTitle}</title>
         <meta name="description" content="${description}" />
-        <link rel="canonical" href="${canonical}" />
+        ${privatePage
+          ? html`<meta name="robots" content="noindex,nofollow,noarchive" />`
+          : html`<link rel="canonical" href="${canonical}" />`}
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/styles.css" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Outcharity" />
         <meta property="og:title" content="${fullTitle}" />
         <meta property="og:description" content="${description}" />
-        <meta property="og:url" content="${canonical}" />
+        ${privatePage ? '' : html`<meta property="og:url" content="${canonical}" />`}
         <meta property="og:image" content="${previewImage}" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="${fullTitle}" />
@@ -73,8 +75,8 @@ function allocationStatement(config, { compact = false } = {}) {
   return html`<p class="${compact ? 'fine-print' : 'allocation'}">
     <strong>${config.charityPercentage}%</strong> of every contribution goes to
     <a href="${config.charityUrl}" target="_blank" rel="noopener">${config.charityName}</a>.
-    The remaining ${config.platformPercentage}% supports Outcharity. Payment-processing fees do
-    not reduce the charity amount.
+    The remaining ${config.platformPercentage}% keeps Outcharity running. Payment-processing fees
+    do not reduce the charity amount.
     <span class="required-disclosure">${config.charityDisclosure}</span>
   </p>`;
 }
@@ -82,7 +84,7 @@ function allocationStatement(config, { compact = false } = {}) {
 function listingCard(advertiser, index, config) {
   const rank = index + 1;
   const rankClass = rank === 1 ? ' listing-card-first' : rank <= 3 ? ' listing-card-podium' : '';
-  const outbidCents = advertiser.total_contributed_cents + 100;
+  const outbidCents = Math.max(advertiser.total_contributed_cents + 100, config.minimumCents);
   const canOutbid = config.checkoutEnabled && outbidCents <= config.maximumCents;
   const outbidLabel =
     rank === 1
@@ -367,7 +369,7 @@ export function managePage(config, advertiser, token, { errors = {}, amount = ''
       ${form}
     </main>`;
 
-  return page(config, { title: `Manage ${advertiser.name}`, path: `/manage/${token}`, body });
+  return page(config, { title: `Manage ${advertiser.name}`, body, privatePage: true });
 }
 
 export function successPage(config, contribution, managementTokenIsValid, managementToken = '') {
@@ -382,7 +384,7 @@ export function successPage(config, contribution, managementTokenIsValid, manage
         </p>
         <a class="button button-secondary" href="/">View leaderboard</a>
       </main>`;
-    return page(config, { title: 'Confirming payment', path: '/success', body: pendingBody });
+    return page(config, { title: 'Confirming payment', body: pendingBody, privatePage: true });
   }
 
   const rankHeading = contribution.rank
@@ -416,7 +418,7 @@ export function successPage(config, contribution, managementTokenIsValid, manage
         : ''}
     </main>`;
 
-  return page(config, { title: 'Payment successful', path: '/success', body });
+  return page(config, { title: 'Payment successful', body, privatePage: true });
 }
 
 export function aboutPage(config) {
@@ -450,7 +452,10 @@ export function termsPage(config) {
         ${config.charityPercentage}% of each gross payment is allocated to the featured charity and
         ${config.platformPercentage}% supports Outcharity. Fractional cents are rounded in the
         charity's favor. Payment-processing fees are paid from Outcharity's share or absorbed by
-        Outcharity; they do not reduce the stated charity allocation.
+        Outcharity; they do not reduce the stated charity allocation. The charity share is
+        delivered to the charity provider after a ${config.charityHoldDays}-day verification
+        period following payment; a payment that is refunded or disputed within that period sends
+        nothing to the charity.
       </p>
       <h2>Listings</h2>
       <p>
@@ -461,19 +466,25 @@ export function termsPage(config) {
       <h2>Refunds and disputes</h2>
       <p>
         Rank changes are an expected part of the product and do not qualify a payment for a refund.
-        Outcharity will review duplicate or unauthorized charges, billing errors, and failures to
-        provide the purchased listing. When a refund is owed, Outcharity issues a full refund
-        through Stripe to the original payment method. A listing removed for violating the
-        published listing rules does not qualify for a refund; if Outcharity removes a compliant
-        listing for another reason, Outcharity issues a full refund.
+        Within ${config.charityHoldDays} days of payment, Outcharity will review duplicate or
+        unauthorized charges, billing errors, failures to provide the purchased listing, and the
+        removal of a compliant listing, and when a refund is owed it issues a full refund through
+        Stripe to the original payment method. A listing removed for violating the published
+        listing rules does not qualify for a refund.
       </p>
       <p>
-        If the charity allocation has already been initiated, the advertiser still receives any
-        approved full refund and Outcharity bears any charity allocation or processing cost it
-        cannot recover. A refund and a charity-provider record correction are separate operations.
-        If a card issuer has opened a payment dispute, it is handled through Stripe and the
-        applicable card-network process rather than through a simultaneous separate refund.
-        Nothing in these Terms limits rights that cannot legally be waived.
+        <strong>After ${config.charityHoldDays} days a payment is final.</strong> By then the
+        charity share has been delivered to the charity and cannot be recalled and the advertising
+        has been provided, so no refund is available for any reason. Where the card issuer offers
+        it, checkout asks the cardholder to authenticate the payment with their bank; by paying,
+        the cardholder confirms the payment is authorized and agrees to these Terms.
+      </p>
+      <p>
+        If a card issuer opens a payment dispute, it is handled through Stripe and the applicable
+        card-network process rather than through a separate refund, and Outcharity contests
+        disputes on payments that have become final. A listing whose payment is refunded or
+        disputed is hidden from the leaderboard automatically while Outcharity reviews it; its
+        payment record is kept. Nothing in these Terms limits rights that cannot legally be waived.
       </p>
       <p>Questions: <a href="mailto:hello@outcharity.com">hello@outcharity.com</a></p>
     </main>`;

@@ -1,5 +1,8 @@
 import { allocateCents, normalizeWebUrl } from './domain.js';
 
+const ADVERTISER_ID_PATTERN = /^[0-9a-f-]{36}$/i;
+const LOGO_KEY_PATTERN = /^logos\/([0-9a-f-]{36})\.(?:png|jpg|webp)$/i;
+
 function integerMetadata(value, name) {
   if (!/^\d+$/.test(String(value || ''))) {
     throw new Error(`Stripe metadata field ${name} is invalid.`);
@@ -47,7 +50,7 @@ export function expiredNewAdvertiserLogoKey(session) {
 
   const advertiserId = String(metadata.advertiser_id || '');
   const logoKey = String(metadata.logo_key || '');
-  const match = /^logos\/([0-9a-f-]{36})\.(?:png|jpg|webp)$/i.exec(logoKey);
+  const match = LOGO_KEY_PATTERN.exec(logoKey);
   return match && match[1].toLowerCase() === advertiserId.toLowerCase() ? logoKey : null;
 }
 
@@ -61,13 +64,13 @@ function parseNewAdvertiser(metadata) {
   const managementTokenHash = String(metadata.management_token_hash || '');
   const url = normalizeWebUrl(metadata.url);
 
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('Stripe advertiser ID is invalid.');
+  if (!ADVERTISER_ID_PATTERN.test(id)) throw new Error('Stripe advertiser ID is invalid.');
   if (!/^[a-z0-9][a-z0-9-]{1,59}$/.test(slug)) throw new Error('Stripe slug is invalid.');
   if (name.length < 1 || name.length > 60) throw new Error('Stripe advertiser name is invalid.');
   if (description.length < 1 || description.length > 140) {
     throw new Error('Stripe advertiser description is invalid.');
   }
-  if (!/^logos\/[0-9a-f-]{36}\.(?:png|jpg|webp)$/i.test(logoKey)) {
+  if (!LOGO_KEY_PATTERN.test(logoKey)) {
     throw new Error('Stripe logo key is invalid.');
   }
   if (xHandle && !/^[A-Za-z0-9_]{1,15}$/.test(xHandle)) {
@@ -130,7 +133,7 @@ export function contributionFromCheckoutSession(session) {
   }
 
   const advertiserId = String(metadata.advertiser_id || '');
-  if (!/^[0-9a-f-]{36}$/i.test(advertiserId)) {
+  if (!ADVERTISER_ID_PATTERN.test(advertiserId)) {
     throw new Error('Stripe advertiser ID is invalid.');
   }
 

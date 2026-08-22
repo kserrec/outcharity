@@ -13,7 +13,11 @@
     }
   ],
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    }
   },
   "assets": {
     "directory": "public"
@@ -58,6 +62,7 @@
     "CHARITY_PERCENTAGE": "90",
     "PLATFORM_PERCENTAGE": "10",
     "MIN_CONTRIBUTION_CENTS": "1000",
-    "MAX_CONTRIBUTION_CENTS": "100000000"
+    "MAX_CONTRIBUTION_CENTS": "10000000",
+    "CHARITY_HOLD_DAYS": "30"
   }
 }

@@ -1,6 +1,27 @@
+import { isLocalHostname } from './http.js';
+
 const DEFAULT_SITE_URL = 'http://localhost:8787';
 const V1_CHARITY_PERCENTAGE = 90;
 const V1_PLATFORM_PERCENTAGE = 10;
+const STRIPE_MINIMUM_USD_CENTS = 50;
+const STRIPE_MAXIMUM_USD_CENTS = 99_999_999;
+const DEFAULT_CHARITY_HOLD_DAYS = 30;
+const MAX_CHARITY_HOLD_DAYS = 365;
+
+// The single reading of CHARITY_HOLD_DAYS shared by the Terms page and the scheduled delivery
+// task, so what the public is told and what the cron does can never diverge. Anything outside
+// 0 through 365 whole days falls back to the default hold rather than to an immediate send.
+export function charityHoldDays(env) {
+  return parseCharityHoldDays(env).days;
+}
+
+function parseCharityHoldDays(env) {
+  const source = String(env.CHARITY_HOLD_DAYS ?? '');
+  if (source === '') return { days: DEFAULT_CHARITY_HOLD_DAYS, valid: true };
+  const days = /^\d{1,3}$/.test(source) ? Number(source) : NaN;
+  if (days <= MAX_CHARITY_HOLD_DAYS) return { days, valid: true };
+  return { days: DEFAULT_CHARITY_HOLD_DAYS, valid: false };
+}
 
 function readInteger(value, fallback, name, issues) {
   const source = value === undefined || value === '' ? String(fallback) : String(value);
@@ -36,8 +57,7 @@ function parseWebUrl(value, name, issues, { requireHttps = false } = {}) {
 
 function isLocalUrl(value) {
   try {
-    const hostname = new URL(value).hostname;
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+    return isLocalHostname(new URL(value).hostname);
   } catch {
     return false;
   }
@@ -77,9 +97,13 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     'MIN_CONTRIBUTION_CENTS',
     issues,
   );
+  const { days: holdDays, valid: holdDaysValid } = parseCharityHoldDays(env);
+  if (!holdDaysValid) {
+    issues.push('CHARITY_HOLD_DAYS must be a whole number of days from 0 through 365.');
+  }
   const maximumCents = readInteger(
     env.MAX_CONTRIBUTION_CENTS,
-    100_000_000,
+    STRIPE_MAXIMUM_USD_CENTS,
     'MAX_CONTRIBUTION_CENTS',
     issues,
   );
@@ -101,6 +125,12 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
   }
   if (minimumCents < 1 || maximumCents < minimumCents) {
     issues.push('The contribution limits are invalid.');
+  }
+  if (minimumCents < STRIPE_MINIMUM_USD_CENTS) {
+    issues.push('MIN_CONTRIBUTION_CENTS is below Stripe’s USD minimum.');
+  }
+  if (maximumCents > STRIPE_MAXIMUM_USD_CENTS) {
+    issues.push('MAX_CONTRIBUTION_CENTS exceeds Stripe’s USD maximum.');
   }
 
   const charityName = String(env.CHARITY_NAME || '').trim();
@@ -131,6 +161,13 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
 
   const launchApproved = String(env.OUTCHARITY_LAUNCH_APPROVED).toLowerCase() === 'true';
   const campaignConfigured = campaignIssues.length === 0;
+  // Outside local development only live-mode Stripe credentials may take money, so a test-mode
+  // key can never turn fake payments into real listings and real charity deliveries.
+  const liveModeRequired = !isLocalUrl(requestOrigin);
+  const stripeKeyIsLive = /^(?:sk|rk)_live_/.test(String(env.STRIPE_SECRET_KEY || ''));
+  if (liveModeRequired && env.STRIPE_SECRET_KEY && !stripeKeyIsLive) {
+    issues.push('STRIPE_SECRET_KEY must be a live-mode key outside local development.');
+  }
   const paymentConfigured = Boolean(
     env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET && env.GOODAPI_API_KEY,
   );
@@ -159,6 +196,7 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     platformPercentage: V1_PLATFORM_PERCENTAGE,
     minimumCents,
     maximumCents,
+    charityHoldDays: holdDays,
     charityName,
     charityUrl,
     charityEin,
@@ -167,6 +205,7 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     launchApproved,
     campaignConfigured,
     paymentConfigured,
+    liveModeRequired,
     storageConfigured,
     protectionConfigured,
     deploymentConfigured,

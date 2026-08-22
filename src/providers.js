@@ -1,17 +1,36 @@
 import Stripe from 'stripe';
 
 const GOODAPI_BASE_URL = 'https://app.thegoodapi.com';
+const STRIPE_REQUEST_TIMEOUT_MS = 20_000;
 
 export function createStripeClient(secretKey) {
   return new Stripe(secretKey, {
     httpClient: Stripe.createFetchHttpClient(),
+    timeout: STRIPE_REQUEST_TIMEOUT_MS,
+    maxNetworkRetries: 1,
   });
+}
+
+// Stripe signs each event with the secret of one endpoint, and test-mode and live-mode endpoints
+// have different secrets, so this check only catches a key and webhook secret taken from
+// different modes. The production rule that actually keeps fake test payments out of the live
+// site is in config.js: outside local development the secret key must be a live key, and the
+// webhook handler refuses any event that is not live.
+export function stripeModeMatches(secretKey, event) {
+  const key = String(secretKey || '');
+  const live = key.startsWith('sk_live_') || key.startsWith('rk_live_');
+  const test = key.startsWith('sk_test_') || key.startsWith('rk_test_');
+  if (!live && !test) return false;
+  return event?.livemode === live;
 }
 
 export async function createCheckoutSession(stripe, input) {
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
     payment_method_types: ['card'],
+    // Require 3-D Secure authentication: under card-network rules an authenticated payment's
+    // fraud-chargeback liability sits with the card issuer rather than with Outcharity.
+    payment_method_options: { card: { request_three_d_secure: 'any' } },
     client_reference_id: input.advertiserId,
     success_url: input.successUrl,
     cancel_url: input.cancelUrl,
@@ -94,4 +113,13 @@ export async function createGoodApiDonation(contribution, apiKey, fetcher = fetc
   }
 
   return parsed;
+}
+
+// A dispute or refund event normally names its payment intent directly. If it only names the
+// charge, Stripe's charge record gives the payment intent.
+export async function paymentIntentIdForCharge(stripe, chargeId) {
+  const charge = await stripe.charges.retrieve(chargeId);
+  const value =
+    typeof charge?.payment_intent === 'string' ? charge.payment_intent : charge?.payment_intent?.id;
+  return value || null;
 }

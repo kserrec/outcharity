@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  findAdvertiserByTokenHash,
+  getContributionBySession,
   getLeaderboard,
   isPublicLogo,
   listUndeliveredContributions,
@@ -161,7 +163,7 @@ test('multiple confirmed payments accumulate on the existing advertiser', async 
   assert.equal(stored.total_contributed_cents, 5_200);
 });
 
-test('ranking uses total descending, earlier creation for ties, and hides flagged listings', async (context) => {
+test('ranking uses total descending, earlier total reach for ties, and hides flagged listings', async (context) => {
   const db = new TestD1Database();
   context.after(() => db.close());
   const alphaId = '33333333-3333-4333-8333-333333333333';
@@ -219,6 +221,70 @@ test('ranking uses total descending, earlier creation for ties, and hides flagge
   assert.equal(board.charityCents, 7_200);
   assert.equal(await isPublicLogo(db, `logos/${charlieId}.png`), false);
   assert.equal(await isPublicLogo(db, `logos/${alphaId}.png`), true);
+});
+
+test('a tie favors the advertiser that reached its current total first', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  const olderId = '10101010-1010-4010-8010-101010101010';
+  const newerId = '20202020-2020-4020-8020-202020202020';
+  const olderAdvertiser = advertiser(olderId, 'Older');
+  const newerAdvertiser = advertiser(newerId, 'Newer');
+
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: olderId,
+      sessionId: 'cs_test_older_first',
+      paymentIntentId: 'pi_older_first',
+      amount: 1_000,
+      advertiser: olderAdvertiser,
+    }),
+  );
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: newerId,
+      sessionId: 'cs_test_newer_first',
+      paymentIntentId: 'pi_newer_first',
+      amount: 2_000,
+      advertiser: newerAdvertiser,
+    }),
+  );
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: olderId,
+      sessionId: 'cs_test_older_second',
+      paymentIntentId: 'pi_older_second',
+      amount: 1_000,
+    }),
+  );
+
+  await db
+    .prepare('UPDATE advertisers SET created_at = ? WHERE id = ?')
+    .bind('2026-01-01T00:00:00.000Z', olderId)
+    .run();
+  await db
+    .prepare('UPDATE advertisers SET created_at = ? WHERE id = ?')
+    .bind('2026-01-02T00:00:00.000Z', newerId)
+    .run();
+
+  const board = await getLeaderboard(db);
+  assert.deepEqual(
+    board.advertisers.map((entry) => entry.name),
+    ['Newer', 'Older'],
+  );
+
+  const managedOlder = await findAdvertiserByTokenHash(
+    db,
+    olderAdvertiser.managementTokenHash,
+  );
+  const newerSuccess = await getContributionBySession(db, 'cs_test_newer_first');
+  const olderSuccess = await getContributionBySession(db, 'cs_test_older_second');
+  assert.equal(managedOlder.rank, 2);
+  assert.equal(newerSuccess.rank, 1);
+  assert.equal(olderSuccess.rank, 2);
 });
 
 test('confirmed contribution identity, allocation, provenance, and time are immutable', async (context) => {
@@ -355,4 +421,28 @@ test('repeated failures cannot starve newer charity deliveries', async (context)
     ['cs_test_delivery_25', 'cs_test_delivery_26'],
   );
   assert.equal(selected.filter((contribution) => contribution.charity_delivery_attempts === 10).length, 23);
+});
+
+test('suspension checks never let a missing payment intent hide other money or block other deliveries', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  const advertiserId = '12121212-1212-4212-8212-121212121212';
+  await recordConfirmedContribution(db, record({ advertiserId, sessionId: 'cs_a', paymentIntentId: 'pi_a', amount: 10_000, advertiser: advertiser(advertiserId, 'Golf') }));
+  await recordConfirmedContribution(db, record({ advertiserId, sessionId: 'cs_b', paymentIntentId: 'pi_b', amount: 20_000 }));
+  // A legacy row with no payment intent at all (only reachable by hand; the webhook refuses it).
+  await recordConfirmedContribution(db, record({ advertiserId, sessionId: 'cs_null', paymentIntentId: null, amount: 30_000 }));
+  await db.prepare("INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES ('pi_b', 'test')").run();
+
+  const board = await getLeaderboard(db);
+  assert.equal(board.grossCents, 40_000, 'only the suspended payment is excluded');
+  const deliverable = (await listUndeliveredContributions(db)).map((row) => row.stripe_checkout_session_id).sort();
+  assert.deepEqual(deliverable, ['cs_a', 'cs_null']);
+
+  await assert.rejects(
+    () => db.prepare("INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES (NULL, 'test')").run(),
+    'a suspension without a payment intent is refused by the schema',
+  );
+  await assert.rejects(
+    () => db.prepare("INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES ('', 'test')").run(),
+  );
 });

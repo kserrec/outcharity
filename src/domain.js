@@ -1,4 +1,5 @@
 const MAX_LOGO_BYTES = 512 * 1024;
+const MAX_LOGO_DIMENSION = 2048;
 const encoder = new TextEncoder();
 
 export class InputError extends Error {
@@ -30,14 +31,14 @@ export function allocateCents(grossCents, charityPercentage) {
 }
 
 export function parseDollarAmount(value, minimumCents, maximumCents) {
-  const source = String(value ?? '').trim().replace(/^\$/, '').replaceAll(',', '');
-  if (!/^\d+(?:\.\d{1,2})?$/.test(source)) {
+  const source = String(value ?? '').trim().replace(/^\$/, '');
+  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(source)) {
     throw new InputError('Enter a dollar amount with no more than two decimal places.', {
       amount: 'Enter a valid dollar amount.',
     });
   }
 
-  const [whole, fraction = ''] = source.split('.');
+  const [whole, fraction = ''] = source.replaceAll(',', '').split('.');
   const centsBigInt = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
   if (centsBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new InputError('That amount is too large.', { amount: 'Enter a smaller amount.' });
@@ -102,8 +103,15 @@ export function displayHost(value) {
   }
 }
 
-function cleanLine(value) {
-  return String(value || '').trim().replace(/\s+/g, ' ');
+// Control characters, bidirectional overrides, zero-width spaces, byte-order marks, and
+// blank-looking filler characters can make displayed text read differently from what was stored
+// or render a name as empty space. Zero-width joiners and non-joiners (U+200C, U+200D), variation
+// selectors, and tag characters stay: emoji sequences and Persian/Indic scripts need them.
+const INVISIBLE_CHARACTERS =
+  /[\p{Cc}\u00ad\u034f\u061c\u115f\u1160\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\u2800\u3164\ufeff\uffa0\ufff9-\ufffb]/gu;
+
+export function cleanLine(value) {
+  return String(value || '').replace(INVISIBLE_CHARACTERS, '').trim().replace(/\s+/g, ' ');
 }
 
 export function validateListingFields(formData, config) {
@@ -174,13 +182,89 @@ export async function validateLogo(file) {
     String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
     String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
 
-  if (isPng) return { bytes, extension: 'png', contentType: 'image/png' };
-  if (isJpeg) return { bytes, extension: 'jpg', contentType: 'image/jpeg' };
-  if (isWebp) return { bytes, extension: 'webp', contentType: 'image/webp' };
+  let image;
+  if (isPng) image = { bytes, extension: 'png', contentType: 'image/png' };
+  else if (isJpeg) image = { bytes, extension: 'jpg', contentType: 'image/jpeg' };
+  else if (isWebp) image = { bytes, extension: 'webp', contentType: 'image/webp' };
+  else {
+    throw new InputError('That file is not a valid PNG, JPEG, or WebP image.', {
+      logo: 'Choose a PNG, JPEG, or WebP image.',
+    });
+  }
 
-  throw new InputError('That file is not a valid PNG, JPEG, or WebP image.', {
-    logo: 'Choose a PNG, JPEG, or WebP image.',
-  });
+  // A small file can declare enormous pixel dimensions that every visitor's browser must then
+  // allocate memory to decode, so the declared size is checked before the logo is accepted.
+  const dimensions = imageDimensions(image.extension, bytes);
+  if (!dimensions) {
+    throw new InputError('That file is not a valid PNG, JPEG, or WebP image.', {
+      logo: 'Choose a PNG, JPEG, or WebP image.',
+    });
+  }
+  if (
+    dimensions.width < 1 ||
+    dimensions.height < 1 ||
+    dimensions.width > MAX_LOGO_DIMENSION ||
+    dimensions.height > MAX_LOGO_DIMENSION
+  ) {
+    throw new InputError(`The logo must be at most ${MAX_LOGO_DIMENSION} pixels wide and tall.`, {
+      logo: `Choose an image no larger than ${MAX_LOGO_DIMENSION} × ${MAX_LOGO_DIMENSION} pixels.`,
+    });
+  }
+  return image;
+}
+
+export function imageDimensions(extension, bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (extension === 'png') {
+    if (bytes.length < 24 || String.fromCharCode(...bytes.slice(12, 16)) !== 'IHDR') return null;
+    return { width: view.getUint32(16), height: view.getUint32(20) };
+  }
+  if (extension === 'jpg') {
+    let offset = 2;
+    while (offset + 4 <= bytes.length) {
+      if (bytes[offset] !== 0xff) return null;
+      const marker = bytes[offset + 1];
+      if (marker === 0xff) {
+        offset += 1;
+        continue;
+      }
+      if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+        offset += 2;
+        continue;
+      }
+      if (marker === 0xd9 || marker === 0xda) return null;
+      const length = view.getUint16(offset + 2);
+      if (length < 2) return null;
+      const isFrameHeader =
+        marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isFrameHeader) {
+        if (offset + 9 > bytes.length) return null;
+        return { height: view.getUint16(offset + 5), width: view.getUint16(offset + 7) };
+      }
+      offset += 2 + length;
+    }
+    return null;
+  }
+  if (extension === 'webp') {
+    if (bytes.length < 30) return null;
+    const chunk = String.fromCharCode(...bytes.slice(12, 16));
+    if (chunk === 'VP8 ') {
+      if (bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a) return null;
+      return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff };
+    }
+    if (chunk === 'VP8L') {
+      if (bytes[20] !== 0x2f) return null;
+      const bits = view.getUint32(21, true);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+    if (chunk === 'VP8X') {
+      const width = 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16));
+      const height = 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16));
+      return { width, height };
+    }
+    return null;
+  }
+  return null;
 }
 
 export function makeSlug(name, id) {

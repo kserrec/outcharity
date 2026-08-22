@@ -135,6 +135,7 @@ test('Stripe Checkout charges the exact requested cents and preserves fulfillmen
   assert.deepEqual(captured.metadata, metadata);
   assert.equal(captured.payment_intent_data.metadata.advertiser_id, advertiserId);
   assert.match(captured.custom_text.submit.message, /Rankings may change/);
+  assert.equal(captured.payment_method_options.card.request_three_d_secure, 'any');
 });
 
 test('Stripe webhook verification accepts a valid signature and rejects a bad one', async () => {
@@ -148,7 +149,13 @@ test('Stripe webhook verification accepts a valid signature and rejects a bad on
   await assert.rejects(() => verifyStripeEvent(stripe, payload, signature, 'wrong_secret'));
 });
 
-test('GoodAPI sends exact charity cents and rejects a mismatched confirmation', async () => {
+test('GoodAPI sends exact charity cents and rejects a mismatched confirmation', async (context) => {
+  const timeouts = [];
+  const timeoutSignal = new AbortController().signal;
+  context.mock.method(AbortSignal, 'timeout', (milliseconds) => {
+    timeouts.push(milliseconds);
+    return timeoutSignal;
+  });
   let captured;
   const contribution = {
     id: 'contribution-1',
@@ -172,6 +179,8 @@ test('GoodAPI sends exact charity cents and rejects a mismatched confirmation', 
   assert.equal(captured.body.ein, '12-3456789');
   assert.equal(captured.body.charity_name, 'Example Charity');
   assert.equal(captured.body.idempotency_key, 'outcharity-cs_test_1234567890');
+  assert.deepEqual(timeouts, [10_000], 'the provider call carries a 10-second timeout');
+  assert.equal(captured.options.signal, timeoutSignal);
 
   await assert.rejects(
     () =>
@@ -182,4 +191,9 @@ test('GoodAPI sends exact charity cents and rejects a mismatched confirmation', 
         )),
     /incomplete or mismatched donation record/,
   );
+});
+
+test('the Stripe client has a bounded request timeout', () => {
+  const stripe = createStripeClient('sk_test_placeholder');
+  assert.equal(stripe.getApiField('timeout'), 20_000);
 });

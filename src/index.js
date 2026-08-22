@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
 
-import { deliverCharityPortion, retryUndeliveredCharityPortions } from './charity.js';
+import { deliverEligibleCharityPortions } from './charity.js';
 import { getConfig } from './config.js';
 import {
   findAdvertiserByTokenHash,
   getContributionBySession,
   getLeaderboard,
+  hideAdvertiserForPaymentIntent,
+  isConfirmedLogo,
   isPublicLogo,
   recordConfirmedContribution,
 } from './db.js';
@@ -25,6 +28,8 @@ import {
   canonicalOriginResponse,
   htmlResponse,
   invalidatePublicHomepage,
+  invalidatePublicLogo,
+  isPrivatePath,
   publicAssetCacheKey,
   publicCacheKey,
   readFormDataWithinLimit,
@@ -39,7 +44,13 @@ import {
   existingAdvertiserMetadata,
   newAdvertiserMetadata,
 } from './payments.js';
-import { createCheckoutSession, createStripeClient, verifyStripeEvent } from './providers.js';
+import {
+  createCheckoutSession,
+  createStripeClient,
+  paymentIntentIdForCharge,
+  stripeModeMatches,
+  verifyStripeEvent,
+} from './providers.js';
 import {
   aboutPage,
   homePage,
@@ -52,6 +63,38 @@ import {
 } from './views.js';
 
 const app = new Hono();
+const NEW_CHECKOUT_BODY_LIMIT = 700 * 1024;
+const EXISTING_CHECKOUT_BODY_LIMIT = 16 * 1024;
+const STRIPE_WEBHOOK_BODY_LIMIT = 1024 * 1024;
+const MANAGEMENT_COOKIE_MAX_AGE_SECONDS = 2 * 24 * 60 * 60;
+const ADVERTISER_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONTRIBUTION_EVENT_TYPES = [
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+];
+// A refunded or disputed payment hides its listing until Kyle reviews it.
+const LISTING_SUSPENSION_EVENT_TYPES = ['charge.dispute.created', 'charge.refunded'];
+
+const PAYMENT_INTENT_ID_PATTERN = /^pi_[A-Za-z0-9_]{1,240}$/;
+const CHARGE_ID_PATTERN = /^(?:ch|py)_[A-Za-z0-9_]{1,240}$/;
+
+function idFromStripeField(value, pattern) {
+  const id = typeof value === 'string' ? value : value?.id;
+  return typeof id === 'string' && pattern.test(id) ? id : null;
+}
+
+// Disputes carry `payment_intent` and `charge`; a Charge object is its own charge ID.
+async function paymentIntentIdFromStripeObject(stripe, object) {
+  const direct = idFromStripeField(object?.payment_intent, PAYMENT_INTENT_ID_PATTERN);
+  if (direct) return direct;
+  const chargeId =
+    object?.object === 'charge'
+      ? idFromStripeField(object.id, CHARGE_ID_PATTERN)
+      : idFromStripeField(object?.charge, CHARGE_ID_PATTERN);
+  if (!chargeId) return null;
+  return idFromStripeField(await paymentIntentIdForCharge(stripe, chargeId), PAYMENT_INTENT_ID_PATTERN);
+}
 
 app.use('*', async (context, next) => {
   const config = configFor(context);
@@ -65,11 +108,21 @@ app.use('*', async (context, next) => {
   });
   context.res = applySecurityHeaders(mutableResponse, {
     strictTransport: shouldUseStrictTransport(context.req.raw, config.siteUrl),
+    privateResponse: isPrivatePath(new URL(context.req.url).pathname),
   });
 });
 
 function configFor(context) {
   return getConfig(context.env, context.req.url);
+}
+
+function messageResponse(context, config, options) {
+  const { document, status } = messagePage(config, options);
+  return htmlResponse(context, document, status);
+}
+
+function requestError(status, message) {
+  return Object.assign(new Error(message), { status });
 }
 
 function safeFormValues(formData) {
@@ -82,15 +135,31 @@ function safeFormValues(formData) {
   };
 }
 
+// Every field is validated so one submission shows every problem at once, not one per round trip.
+async function validateSubmission(formData, config) {
+  const failures = [];
+  const collect = (run) => run().catch((error) => {
+    if (!(error instanceof InputError)) throw error;
+    failures.push(error);
+    return undefined;
+  });
+  const listing = await collect(async () => validateListingFields(formData, config));
+  const logo = await collect(() => validateLogo(formData.get('logo')));
+  if (failures.length === 0) return { listing, logo };
+  return {
+    errors: Object.assign({}, ...failures.map((failure) => failure.fields)),
+    message: failures.length === 1 ? failures[0].message : 'Please correct the highlighted fields.',
+  };
+}
+
 function checkoutClosed(context, config) {
-  const result = messagePage(config, {
+  return messageResponse(context, config, {
     title: 'Checkout closed',
     heading: 'Checkout is not open yet.',
     message:
       'The charity agreement, approved campaign wording, payment credentials, and storage must all be ready before Outcharity accepts money.',
     status: 503,
   });
-  return htmlResponse(context, result.document, result.status);
 }
 
 function contributionSessionInput(config, data) {
@@ -100,9 +169,40 @@ function contributionSessionInput(config, data) {
     charityName: config.charityName,
     charityPercentage: config.charityPercentage,
     metadata: data.metadata,
-    successUrl: `${config.siteUrl}/success?session_id={CHECKOUT_SESSION_ID}&manage=${data.managementToken}`,
+    successUrl: `${config.siteUrl}/success?session_id={CHECKOUT_SESSION_ID}&advertiser_id=${data.advertiserId}`,
     cancelUrl: data.cancelUrl,
   };
+}
+
+function managementLinkNotFound(context, config, heading, message) {
+  return messageResponse(context, config, {
+    title: 'Management link not found',
+    heading,
+    message,
+    status: 404,
+  });
+}
+
+function managementCookieName(advertiserId) {
+  return `outcharity-manage-${advertiserId.replaceAll('-', '')}`;
+}
+
+function setManagementCookie(context, advertiserId, token) {
+  setCookie(context, managementCookieName(advertiserId), token, {
+    prefix: 'host',
+    httpOnly: true,
+    maxAge: MANAGEMENT_COOKIE_MAX_AGE_SECONDS,
+    path: '/',
+    priority: 'High',
+    sameSite: 'Lax',
+    secure: true,
+  });
+  context.header('Cache-Control', 'no-store');
+}
+
+function getManagementCookie(context, advertiserId) {
+  if (!ADVERTISER_ID_PATTERN.test(advertiserId)) return '';
+  return getCookie(context, managementCookieName(advertiserId), 'host') || '';
 }
 
 app.get('/', async (context) => {
@@ -149,20 +249,11 @@ app.post('/checkout', async (context) => {
   if (!config.checkoutEnabled) return checkoutClosed(context, config);
   requireSameOrigin(context.req.raw);
   await requireRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'new-checkout');
-  const formData = await readFormDataWithinLimit(context.req.raw, 700 * 1024);
+  const formData = await readFormDataWithinLimit(context.req.raw, NEW_CHECKOUT_BODY_LIMIT);
   const values = safeFormValues(formData);
-  let listing;
-  let logo;
-  try {
-    listing = validateListingFields(formData, config);
-    logo = await validateLogo(formData.get('logo'));
-  } catch (error) {
-    if (!(error instanceof InputError)) throw error;
-    return htmlResponse(
-      context,
-      submitPage(config, { values, errors: error.fields, message: error.message }),
-      422,
-    );
+  const { listing, logo, errors, message } = await validateSubmission(formData, config);
+  if (errors) {
+    return htmlResponse(context, submitPage(config, { values, errors, message }), 422);
   }
 
   const advertiserId = crypto.randomUUID();
@@ -194,10 +285,10 @@ app.post('/checkout', async (context) => {
         amountCents: listing.amountCents,
         advertiserId,
         metadata,
-        managementToken,
         cancelUrl: `${config.siteUrl}/submit?amount=${amountInputValue(listing.amountCents)}`,
       }),
     );
+    setManagementCookie(context, advertiserId, managementToken);
     return context.redirect(session.url, 303);
   } catch (error) {
     await context.env.LOGOS.delete(logoKey);
@@ -206,30 +297,43 @@ app.post('/checkout', async (context) => {
   }
 });
 
+app.get('/manage-return', (context) => {
+  const config = configFor(context);
+  const advertiserId = context.req.query('advertiser_id') || '';
+  const token = getManagementCookie(context, advertiserId);
+  if (!isManagementToken(token)) {
+    return managementLinkNotFound(
+      context,
+      config,
+      'That return link is no longer available.',
+      'Use the private management link saved after the first confirmed payment.',
+    );
+  }
+  return context.redirect(`/manage/${token}`, 303);
+});
+
 app.get('/manage/:token', async (context) => {
   const config = configFor(context);
   const token = context.req.param('token');
   if (!isManagementToken(token)) {
-    const result = messagePage(config, {
-      title: 'Management link not found',
-      heading: 'That management link is not valid.',
-      message: 'Use the complete private link shown after the first confirmed payment.',
-      status: 404,
-    });
-    return htmlResponse(context, result.document, result.status);
+    return managementLinkNotFound(
+      context,
+      config,
+      'That management link is not valid.',
+      'Use the complete private link shown after the first confirmed payment.',
+    );
   }
 
   await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'manage');
 
   const advertiser = await findAdvertiserByTokenHash(context.env.DB, await hashToken(token));
   if (!advertiser) {
-    const result = messagePage(config, {
-      title: 'Management link not found',
-      heading: 'That management link was not found.',
-      message: 'Use the complete private link shown after the first confirmed payment.',
-      status: 404,
-    });
-    return htmlResponse(context, result.document, result.status);
+    return managementLinkNotFound(
+      context,
+      config,
+      'That management link was not found.',
+      'Use the complete private link shown after the first confirmed payment.',
+    );
   }
 
   return htmlResponse(context, managePage(config, advertiser, token));
@@ -241,19 +345,20 @@ app.post('/manage/:token/checkout', async (context) => {
   requireSameOrigin(context.req.raw);
 
   const token = context.req.param('token');
-  if (!isManagementToken(token)) throw Object.assign(new Error('Management link not found.'), { status: 404 });
+  if (!isManagementToken(token)) throw requestError(404, 'Management link not found.');
   await requireRateLimit(
     context.req.raw,
     context.env.CHECKOUT_RATE_LIMITER,
     'existing-checkout',
   );
-  const formData = await readFormDataWithinLimit(context.req.raw, 16 * 1024);
+  const formData = await readFormDataWithinLimit(
+    context.req.raw,
+    EXISTING_CHECKOUT_BODY_LIMIT,
+  );
   const advertiser = await findAdvertiserByTokenHash(context.env.DB, await hashToken(token));
-  if (!advertiser) throw Object.assign(new Error('Management link not found.'), { status: 404 });
+  if (!advertiser) throw requestError(404, 'Management link not found.');
   if (advertiser.is_hidden) {
-    throw Object.assign(new Error('This listing is hidden and cannot accept another payment.'), {
-      status: 403,
-    });
+    throw requestError(403, 'This listing is hidden and cannot accept another payment.');
   }
 
   const amount = String(formData.get('amount') || '');
@@ -280,12 +385,63 @@ app.post('/manage/:token/checkout', async (context) => {
       amountCents,
       advertiserId: advertiser.id,
       metadata,
-      managementToken: token,
-      cancelUrl: `${config.siteUrl}/manage/${token}`,
+      cancelUrl: `${config.siteUrl}/manage-return?advertiser_id=${advertiser.id}`,
     }),
   );
+  setManagementCookie(context, advertiser.id, token);
   return context.redirect(session.url, 303);
 });
+
+const NOT_COUNTED = { received: true, counted: false };
+
+// An expired session may only remove a logo that no confirmed listing owns, so the deletion
+// never depends on the session's metadata alone.
+async function handleExpiredSession(context, session) {
+  const logoKey = expiredNewAdvertiserLogoKey(session);
+  if (logoKey && !(await isConfirmedLogo(context.env.DB, logoKey))) {
+    await context.env.LOGOS.delete(logoKey);
+  }
+  return NOT_COUNTED;
+}
+
+async function handleListingSuspension(context, stripe, event) {
+  const hidden = await hideAdvertiserForPaymentIntent(
+    context.env.DB,
+    await paymentIntentIdFromStripeObject(stripe, event.data.object),
+    event.type,
+  );
+  if (hidden) {
+    await invalidatePublicHomepage(context.req.raw);
+    await invalidatePublicLogo(context.req.raw, hidden.logoKey);
+  }
+  return { ...NOT_COUNTED, hidden: Boolean(hidden) };
+}
+
+// Records the payment only. The scheduled task delivers the charity share after the hold window
+// (CHARITY_HOLD_DAYS) unless the payment is refunded or disputed first.
+async function handleConfirmedContribution(context, session) {
+  if (session.payment_status !== 'paid') return NOT_COUNTED;
+  const record = contributionFromCheckoutSession(session);
+  if (!record) return NOT_COUNTED;
+
+  const result = await recordConfirmedContribution(context.env.DB, record);
+  if (!result.contribution) throw new Error('Confirmed contribution was not found after recording.');
+  if (result.inserted) await invalidatePublicHomepage(context.req.raw);
+  return { received: true, counted: result.inserted };
+}
+
+function fulfillStripeEvent(context, stripe, event) {
+  if (event.type === 'checkout.session.expired') {
+    return handleExpiredSession(context, event.data.object);
+  }
+  if (LISTING_SUSPENSION_EVENT_TYPES.includes(event.type)) {
+    return handleListingSuspension(context, stripe, event);
+  }
+  if (CONTRIBUTION_EVENT_TYPES.includes(event.type)) {
+    return handleConfirmedContribution(context, event.data.object);
+  }
+  return NOT_COUNTED;
+}
 
 app.post('/webhooks/stripe', async (context) => {
   const signature = context.req.header('stripe-signature');
@@ -293,10 +449,10 @@ app.post('/webhooks/stripe', async (context) => {
     return context.json({ error: 'Webhook configuration or signature is missing.' }, 400);
   }
 
-  const payload = await readTextWithinLimit(context.req.raw, 1024 * 1024);
+  const payload = await readTextWithinLimit(context.req.raw, STRIPE_WEBHOOK_BODY_LIMIT);
   let event;
+  const stripe = createStripeClient(context.env.STRIPE_SECRET_KEY);
   try {
-    const stripe = createStripeClient(context.env.STRIPE_SECRET_KEY);
     event = await verifyStripeEvent(
       stripe,
       payload,
@@ -307,36 +463,20 @@ app.post('/webhooks/stripe', async (context) => {
     console.error('Stripe webhook signature verification failed.', { message: error.message });
     return context.json({ error: 'Invalid webhook signature.' }, 400);
   }
+  const config = configFor(context);
+  if (
+    !stripeModeMatches(context.env.STRIPE_SECRET_KEY, event) ||
+    (config.liveModeRequired && event.livemode !== true)
+  ) {
+    console.error('Stripe webhook event mode does not match the configured secret key.', {
+      eventId: event.id,
+      livemode: event.livemode,
+    });
+    return context.json({ error: 'Webhook event mode does not match this deployment.' }, 400);
+  }
 
   try {
-    if (event.type === 'checkout.session.expired') {
-      const logoKey = expiredNewAdvertiserLogoKey(event.data.object);
-      if (logoKey) await context.env.LOGOS.delete(logoKey);
-      return context.json({ received: true, counted: false });
-    }
-    if (
-      !['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(
-        event.type,
-      )
-    ) {
-      return context.json({ received: true, counted: false });
-    }
-    if (event.data.object.payment_status !== 'paid') {
-      return context.json({ received: true, counted: false });
-    }
-
-    const record = contributionFromCheckoutSession(event.data.object);
-    if (!record) return context.json({ received: true, counted: false });
-
-    const result = await recordConfirmedContribution(context.env.DB, record);
-    if (!result.contribution) throw new Error('Confirmed contribution was not found after recording.');
-    if (result.inserted) await invalidatePublicHomepage(context.req.raw);
-
-    if (result.contribution.charity_delivery_status !== 'delivered') {
-      await deliverCharityPortion(context.env, result.contribution);
-    }
-
-    return context.json({ received: true, counted: result.inserted });
+    return context.json(await fulfillStripeEvent(context, stripe, event));
   } catch (error) {
     console.error('Stripe webhook fulfillment failed.', {
       eventId: event.id,
@@ -349,23 +489,27 @@ app.post('/webhooks/stripe', async (context) => {
 app.get('/success', async (context) => {
   const config = configFor(context);
   const sessionId = context.req.query('session_id') || '';
-  const managementToken = context.req.query('manage') || '';
+  const advertiserId = context.req.query('advertiser_id') || '';
+  const managementToken = getManagementCookie(context, advertiserId);
   const validSessionId = /^cs_(?:test|live)_[A-Za-z0-9_]{8,240}$/.test(sessionId);
   if (!validSessionId) {
-    const result = messagePage(config, {
+    return messageResponse(context, config, {
       title: 'Invalid payment link',
       heading: 'That payment link is invalid.',
       message: 'Open the success link returned after Stripe Checkout, or view the leaderboard.',
       status: 400,
     });
-    return htmlResponse(context, result.document, result.status);
   }
   await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'success');
 
   const contribution = await getContributionBySession(context.env.DB, sessionId);
 
   let managementTokenIsValid = false;
-  if (contribution && isManagementToken(managementToken)) {
+  if (
+    contribution &&
+    contribution.advertiser_id === advertiserId &&
+    isManagementToken(managementToken)
+  ) {
     managementTokenIsValid =
       (await hashToken(managementToken)) === contribution.management_token_hash;
   }
@@ -430,19 +574,18 @@ app.get('/sitemap.xml', (context) => {
 });
 
 app.notFound((context) => {
-  const result = messagePage(configFor(context), {
+  return messageResponse(context, configFor(context), {
     title: 'Not found',
     heading: 'That page does not exist.',
     message: 'The leaderboard is back at the front door.',
     status: 404,
   });
-  return htmlResponse(context, result.document, result.status);
 });
 
 app.onError((error, context) => {
   const status = Number(error.status) || 500;
   if (status >= 500) console.error('Request failed.', { message: error.message });
-  const result = messagePage(configFor(context), {
+  return messageResponse(context, configFor(context), {
     title: status >= 500 ? 'Something went wrong' : 'Request stopped',
     heading: status >= 500 ? 'Something went wrong.' : 'That request was stopped.',
     message:
@@ -451,7 +594,6 @@ app.onError((error, context) => {
         : error.message,
     status,
   });
-  return htmlResponse(context, result.document, result.status);
 });
 
 export { app };
@@ -459,6 +601,6 @@ export { app };
 export default {
   fetch: app.fetch,
   scheduled(_event, env, context) {
-    context.waitUntil(retryUndeliveredCharityPortions(env));
+    context.waitUntil(deliverEligibleCharityPortions(env));
   },
 };
