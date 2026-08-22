@@ -219,7 +219,14 @@ money moved, no test row entered production, and no permanent staging system rem
     Cloudflare reports `changes: 0`, `rows_written: 0`, and `changed_db: false`
 - [x] Reverify the final Terms and Privacy pages, Worker logs, and `/health` still reporting
   `checkoutEnabled: false` after the locked homepage deployment
-- [ ] Reverify `hello@outcharity.com` delivery and the final Stripe and GoodAPI dashboard status
+- [x] Reverify `hello@outcharity.com` delivery and the final Stripe and GoodAPI dashboard status
+  - Kyle sent the final launch-delivery message and confirmed that it arrived at the configured
+    destination inbox on 2026-08-21
+  - The same final setup session observed the dedicated live Stripe account as `Verified`, with no
+    warning banner, its receiving bank configured, and its production webhook enabled; the signed
+    webhook probe then succeeded without counting a contribution
+  - GoodAPI remained active at the disclosed `$49/month`, and its production key returned the exact
+    approved St. Jude record in a search-only request without creating a donation
 - [x] Require the checksum-pinned Gitleaks workflow and dependency checks to pass; enable GitHub's
   native secret scanning and push protection only if the private-repository account now offers them
   - A fresh `npm ci`, the full `npm audit`, and `npm audit --omit=dev` all report zero
@@ -244,7 +251,15 @@ the launch switch still prevents Checkout creation.
     109.41 KiB compressed
   - Release commit `8d51bdd` is pushed to `origin/codex/outcharity-v1`; GitHub CI passed, and draft
     pull request `#1` targets `main` without enabling payments
-- [ ] Verify the immediate rollback: restore `OUTCHARITY_LAUNCH_APPROVED=false` and redeploy
+- [x] Verify the immediate rollback: restore `OUTCHARITY_LAUNCH_APPROVED=false` and redeploy
+  - From the clean committed tree, all 45 tests, syntax checking, the production dry build, and
+    `git diff --check` passed with the launch flag explicitly false
+  - Strict deployment created Worker version `b92a381c-4423-442c-a21b-46b7a7440cf3` with message
+    `Locked rollback rehearsal; checkout remains disabled`; Cloudflare reports that version at
+    100% of production traffic
+  - `/health` returns `checkoutEnabled: false`, a production Checkout POST returns HTTP `503`, and a
+    read-only D1 query reports zero advertisers, zero contributions, zero writes, and
+    `changed_db: false`
 - [ ] Set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once, and verify `/health` reports
   `checkoutEnabled: true`
 - [ ] Open a live Checkout Session through the website and stop before supplying a payment method;

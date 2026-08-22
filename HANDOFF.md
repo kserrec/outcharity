@@ -1,21 +1,25 @@
 # Outcharity session handoff
 
-This handoff is current through the locked production repository and CI gate on 2026-08-21. It
-becomes stale when Phase 6 or Phase 7 in `PLAN.md` progresses.
+This handoff is current through the locked Phase 7 rollback rehearsal on 2026-08-21. It becomes
+stale when Phase 7 in `PLAN.md` progresses.
 
 ## Exact stop point
 
-- Resume at the first unfinished Phase 6 item: reverify `hello@outcharity.com` delivery and the
-  final Stripe and GoodAPI dashboard status.
+- Phase 6 is complete. Kyle confirmed receipt of the final `hello@outcharity.com` delivery test;
+  the already observed final Stripe status and the successful Stripe and GoodAPI production probes
+  complete the provider gate without making Kyle repeat those checks.
+- Resume at the next unfinished Phase 7 item: set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once,
+  and verify `/health`. This opens live Stripe Checkout to the public and therefore requires Kyle's
+  explicit authorization immediately before deployment.
 - Production remains deliberately locked. `https://outcharity.com/health` most recently returned
-  `{"ok":true,"checkoutEnabled":false}`, and a direct Checkout POST returned HTTP `503`. Do not
-  enable it during Phase 6.
+  `{"ok":true,"checkoutEnabled":false}`, and a direct Checkout POST returned HTTP `503`.
 
 ## Completed external setup and rehearsal
 
 - Cloudflare serves `outcharity.com`; production D1 `outcharity` and private R2
   `outcharity-logos` still exist. Email Routing for `hello@outcharity.com` is enabled and the
-  destination was verified.
+  destination was verified. Kyle sent the final launch-delivery message on 2026-08-21 and confirmed
+  that it arrived at the configured destination inbox.
 - GoodAPI Donations is active at the disclosed `$49/month`. A production-key search-only request
   returned `St Jude Childrens Research Hospital`, EIN `620646012`, nonprofit ID
   `n_6JeFQADP9Hq6qEAHcPqhsfEi`, and `WWW.STJUDE.ORG`. It called only `GET /charities/search`; no
@@ -86,16 +90,28 @@ becomes stale when Phase 6 or Phase 7 in `PLAN.md` progresses.
 - Production status copy no longer incorrectly says campaign wording awaits approval. It now says
   checkout remains closed until every launch check passes, and the disabled control reads
   “Opening after final checks.” The launch gate behavior itself is unchanged.
-- The current production Worker version is `5aea4953-5738-4a32-98fa-c2b9846527e5`, deployed with
-  `OUTCHARITY_LAUNCH_APPROVED=false`. The final pre-deploy gates passed 45/45 tests, JavaScript
+- The homepage release was Worker version `5aea4953-5738-4a32-98fa-c2b9846527e5`, deployed with
+  `OUTCHARITY_LAUNCH_APPROVED=false`. Its final pre-deploy gates passed 45/45 tests, JavaScript
   syntax checking, `git diff --check`, and Wrangler's 109.41 KiB compressed dry run; Worker startup
-  is 6 ms.
+  was 6 ms.
 - Live desktop and mobile screenshots match the locked design. The homepage returns `200`, health
   returns checkout disabled, and a direct Checkout POST returns `503`. Retained logs identify the
   current version with outcome `ok` and no exceptions for the homepage and health probes.
 - No product data, dependency, payment, ranking, allocation, database, validation, or launch-gate
   behavior changed. Populated advertisers existed only in self-contained `/tmp` visual fixtures;
   no fixture row or asset entered production.
+
+## Locked rollback rehearsal
+
+- The clean committed tree again passed all 45 tests, JavaScript syntax checking, the diff check,
+  and the 109.41 KiB compressed production dry build. The build listed
+  `OUTCHARITY_LAUNCH_APPROVED` as `false`.
+- A strict Wrangler deployment published Worker version `b92a381c-4423-442c-a21b-46b7a7440cf3`
+  with message `Locked rollback rehearsal; checkout remains disabled`. Cloudflare reports that
+  exact version at 100% of production traffic; startup remains 6 ms and no asset file changed.
+- Live `/health` returns `{"ok":true,"checkoutEnabled":false}` and a same-origin production
+  Checkout POST returns HTTP `503`. A subsequent read-only D1 query reports zero advertisers, zero
+  contributions, zero changes, zero rows written, and `changed_db: false`.
 
 ## Repository release gate
 
@@ -134,9 +150,9 @@ becomes stale when Phase 6 or Phase 7 in `PLAN.md` progresses.
 
 ## Resume sequence
 
-1. Read this file and Phase 6 of `PLAN.md`.
-2. Finish the Phase 6 email and provider-dashboard recheck.
-3. Continue Phase 7 at the immediate rollback verification; do not merge the draft pull request or
-   enable payments merely because the repository gate passed.
-4. Do not accept a live payment or change the launch flag until the corresponding
-   Phase 6 or Phase 7 gate explicitly authorizes it.
+1. Read this file and Phase 7 of `PLAN.md`.
+2. Obtain Kyle's explicit authorization to open live Checkout; state plainly that this permits real
+   visitors to proceed to Stripe and make real payments.
+3. Set `OUTCHARITY_LAUNCH_APPROVED=true`, deploy once, and verify `/health` reports checkout enabled.
+4. Continue Phase 7 in order. Do not merge the draft pull request merely because the locked gates
+   passed, and do not manufacture a live payment for testing.
