@@ -376,6 +376,15 @@ test('production requests use only the configured HTTPS origin', async () => {
     canonicalResponse.headers.get('Strict-Transport-Security'),
     'max-age=31536000',
   );
+  assert.equal(canonicalResponse.headers.get('Referrer-Policy'), 'same-origin');
+  assert.match(
+    canonicalResponse.headers.get('Content-Security-Policy'),
+    /script-src 'self' https:\/\/static\.cloudflareinsights\.com(?:;|$)/,
+  );
+  assert.doesNotMatch(
+    canonicalResponse.headers.get('Content-Security-Policy'),
+    /script-src[^;]*\*/,
+  );
 });
 
 test('deployment disables alternate public hosts and hardens static assets', () => {
@@ -396,7 +405,12 @@ test('deployment disables alternate public hosts and hardens static assets', () 
   assert.match(staticHeaders, /^https:\/\/outcharity\.com\/\*/m);
   assert.match(staticHeaders, /Strict-Transport-Security: max-age=31536000/);
   assert.match(staticHeaders, /X-Content-Type-Options: nosniff/);
-  assert.match(staticHeaders, /Referrer-Policy: no-referrer/);
+  assert.match(staticHeaders, /Referrer-Policy: same-origin/);
+  assert.match(
+    staticHeaders,
+    /script-src 'self' https:\/\/static\.cloudflareinsights\.com(?:;|$)/,
+  );
+  assert.doesNotMatch(staticHeaders, /script-src[^;]*\*/);
 });
 
 test('logo query variations share one cache entry and one storage read', async (context) => {

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { getConfig } from '../src/config.js';
 import { hashToken } from '../src/domain.js';
 import { app } from '../src/index.js';
-import { homePage } from '../src/views.js';
+import { homePage, termsPage } from '../src/views.js';
 
 function completeEnvironment() {
   return {
@@ -28,6 +29,40 @@ function completeEnvironment() {
     LOOKUP_RATE_LIMITER: { limit() {} },
   };
 }
+
+test('production configuration pins the approved campaign while checkout stays locked', () => {
+  const deployment = JSON.parse(
+    readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'),
+  );
+
+  assert.equal(deployment.vars.OUTCHARITY_LAUNCH_APPROVED, 'false');
+  assert.equal(deployment.vars.CHARITY_NAME, 'St Jude Childrens Research Hospital');
+  assert.equal(deployment.vars.CHARITY_URL, 'https://www.stjude.org');
+  assert.equal(deployment.vars.CHARITY_EIN, '620646012');
+  assert.equal(
+    deployment.vars.CAMPAIGN_HEADLINE,
+    'Buy the top spot. Help the featured charity.',
+  );
+  assert.equal(
+    deployment.vars.CHARITY_DISCLOSURE,
+    'Outcharity is not affiliated with or endorsed by St. Jude Children’s Research Hospital. Each payment purchases advertising and is not represented as a tax-deductible charitable gift by the advertiser. Of each gross payment, 90% is directed to St Jude Childrens Research Hospital through GoodAPI and 10% supports Outcharity. Outcharity separately absorbs payment-processing fees; those fees do not reduce the 90% charity allocation.',
+  );
+});
+
+test('terms publish the approved refund and dispute promises', () => {
+  const environment = completeEnvironment();
+  const document = String(termsPage(getConfig(environment, environment.SITE_URL)));
+
+  assert.match(document, /<h2>Refunds and disputes<\/h2>/);
+  assert.match(document, /Rank changes are an expected part of the product/);
+  assert.match(document, /full refund\s+through Stripe to the original payment method/);
+  assert.match(document, /removed for violating the\s+published listing rules does not qualify/);
+  assert.match(document, /Outcharity bears any charity allocation or processing cost it\s+cannot recover/);
+  assert.match(document, /charity-provider record correction are separate operations/);
+  assert.match(document, /applicable card-network process/);
+  assert.match(document, /Nothing in these Terms limits rights that cannot legally be waived/);
+  assert.doesNotMatch(document, /Final refund, chargeback/);
+});
 
 test('checkout cannot open without explicit approval and every required integration', () => {
   const environment = completeEnvironment();
@@ -326,6 +361,77 @@ test('server-rendered listings escape advertiser-controlled HTML', () => {
   assert.match(document, /src="\/logos\/11111111-1111-4111-8111-111111111111\.png"/);
   assert.doesNotMatch(document, /\/logos\/logos\//);
   assert.match(document, /Approved disclosure\./);
+});
+
+test('homepage elevates the top three and makes every listing a full-card website link', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const advertisers = [
+    ['First Company', 'https://first.example/', 40_000],
+    ['Second Company', 'https://second.example/', 30_000],
+    ['Third Company', 'https://third.example/', 20_000],
+    ['Fourth Company', 'https://fourth.example/', 10_000],
+  ].map(([name, url, total], index) => ({
+    id: `${index + 1}1111111-1111-4111-8111-111111111111`,
+    name,
+    description: `${name} description`,
+    url,
+    logo_key: `logos/company-${index + 1}.png`,
+    total_contributed_cents: total,
+    created_at: `2026-01-0${index + 1}T00:00:00.000Z`,
+  }));
+  const document = String(
+    homePage(config, {
+      grossCents: 100_000,
+      charityCents: 90_000,
+      advertisers,
+    }),
+  );
+
+  const primaryIndex = document.indexOf('class="leader-primary"');
+  const firstIndex = document.indexOf('data-rank="1"');
+  const runnersIndex = document.indexOf('class="leader-runners"');
+  const secondIndex = document.indexOf('data-rank="2"');
+  const thirdIndex = document.indexOf('data-rank="3"');
+  const restIndex = document.indexOf('class="listing-stack listing-stack-rest"');
+  const fourthIndex = document.indexOf('data-rank="4"');
+
+  assert.ok(primaryIndex >= 0 && primaryIndex < firstIndex);
+  assert.ok(firstIndex < runnersIndex && runnersIndex < secondIndex);
+  assert.ok(secondIndex < thirdIndex && thirdIndex < restIndex);
+  assert.ok(restIndex < fourthIndex);
+  assert.match(document, /class="listing-card listing-card-first" data-rank="1"/);
+  assert.equal(document.match(/class="listing-hit-area"/g)?.length, advertisers.length);
+
+  for (const advertiser of advertisers) {
+    const hrefIndex = document.indexOf(`href="${advertiser.url}"`);
+    const anchorStart = document.lastIndexOf('class="listing-hit-area"', hrefIndex);
+    const anchorEnd = document.indexOf('></a>', hrefIndex);
+    const anchor = document.slice(anchorStart, anchorEnd);
+
+    assert.ok(hrefIndex >= 0, advertiser.name);
+    assert.ok(anchorStart >= 0 && hrefIndex - anchorStart < 100, advertiser.name);
+    assert.match(anchor, /target="_blank"/);
+    assert.match(anchor, /rel="noopener sponsored"/);
+    assert.match(anchor, new RegExp(`aria-label="Visit ${advertiser.name}"`));
+  }
+});
+
+test('locked empty homepage makes the open top spot prominent without implying checkout is open', () => {
+  const environment = completeEnvironment();
+  environment.OUTCHARITY_LAUNCH_APPROVED = 'false';
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(
+    homePage(config, { grossCents: 0, charityCents: 0, advertisers: [] }),
+  );
+
+  assert.match(document, /class="empty-rank"[^>]*>#1</);
+  assert.match(document, /The first confirmed listing owns the top spot/);
+  assert.match(document, /No filler listings\. No made-up activity\./);
+  assert.match(document, /Opening after final checks/);
+  assert.match(document, /Checkout stays closed until every launch check\s+passes/);
+  assert.doesNotMatch(document, /href="\/submit"/);
+  assert.doesNotMatch(document, /class="listing-hit-area"/);
 });
 
 test('a success-page failure never claims that a completed payment was not charged', async (context) => {

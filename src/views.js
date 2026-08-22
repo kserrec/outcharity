@@ -51,11 +51,22 @@ function brandHeader() {
   </header>`;
 }
 
+function homeHeader() {
+  return html`<header class="home-header shell">
+    <a class="wordmark" href="/" aria-label="Outcharity home">Outcharity</a>
+    <nav aria-label="Primary navigation">
+      <a href="#leaderboard-title">Leaderboard</a>
+      <a href="/about">About</a>
+      <a href="/terms">Rules</a>
+    </nav>
+  </header>`;
+}
+
 function allocationStatement(config, { compact = false } = {}) {
   if (!config.publicCampaign) {
     return html`<p class="${compact ? 'fine-print' : 'allocation prelaunch'}">
-      The charity partnership and public wording are being finalized. Checkout stays closed until
-      both are approved in writing.
+      Outcharity is not accepting payments yet. Checkout stays closed until every launch check
+      passes.
     </p>`;
   }
 
@@ -70,6 +81,7 @@ function allocationStatement(config, { compact = false } = {}) {
 
 function listingCard(advertiser, index, config) {
   const rank = index + 1;
+  const rankClass = rank === 1 ? ' listing-card-first' : rank <= 3 ? ' listing-card-podium' : '';
   const outbidCents = advertiser.total_contributed_cents + 100;
   const canOutbid = config.checkoutEnabled && outbidCents <= config.maximumCents;
   const outbidLabel =
@@ -77,7 +89,7 @@ function listingCard(advertiser, index, config) {
       ? `Take #1 for ${formatMoney(outbidCents)}`
       : `Beat #${rank} for ${formatMoney(outbidCents)}`;
 
-  return html`<article class="listing-card">
+  return html`<article class="${`listing-card${rankClass}`}" data-rank="${rank}">
     <a
       class="listing-hit-area"
       href="${advertiser.url}"
@@ -85,7 +97,10 @@ function listingCard(advertiser, index, config) {
       rel="noopener sponsored"
       aria-label="${`Visit ${advertiser.name}`}"
     ></a>
-    <div class="rank" aria-label="${`Rank ${rank}`}">#${rank}</div>
+    <div class="rank" aria-label="${`Rank ${rank}`}">
+      <span>${rank === 1 ? 'Top spot' : 'Rank'}</span>
+      <strong>#${rank}</strong>
+    </div>
     <img
       class="listing-logo"
       src="${`/${advertiser.logo_key}`}"
@@ -97,7 +112,9 @@ function listingCard(advertiser, index, config) {
     <div class="listing-copy">
       <h2>${advertiser.name}</h2>
       <p>${advertiser.description}</p>
-      <span>${displayHost(advertiser.url)}</span>
+      <span class="listing-destination">
+        ${displayHost(advertiser.url)} <span aria-hidden="true">↗</span>
+      </span>
     </div>
     <div class="listing-money">
       <strong>${formatMoney(advertiser.total_contributed_cents)}</strong>
@@ -113,35 +130,67 @@ function listingCard(advertiser, index, config) {
 
 export function homePage(config, data) {
   const board = data.advertisers.map((advertiser, index) => listingCard(advertiser, index, config));
+  const leaders = board.slice(0, 3);
+  const remainingListings = board.slice(3);
   const heroCta = config.checkoutEnabled
     ? html`<a class="button button-primary" href="/submit">Get on the board</a>`
-    : html`<span class="button button-disabled" aria-disabled="true">Opening after approval</span>`;
+    : html`<span class="button button-disabled" aria-disabled="true">Opening after final checks</span>`;
 
-  const body = html`<main>
-    <section class="hero shell">
-      <a class="wordmark hero-wordmark" href="/">Outcharity</a>
-      <h1>${config.publicCampaign ? config.campaignHeadline : 'Advertise by giving.'}</h1>
-      <p class="raised">${formatMoney(data.grossCents)} given</p>
-      ${config.publicCampaign
-        ? html`<p class="charity-total">${formatMoney(data.charityCents)} to charity</p>`
-        : ''}
-      ${allocationStatement(config)}
-      ${heroCta}
-    </section>
+  const body = html`${homeHeader()}
+    <main class="home-main">
+      <section class="campaign-mast shell" aria-labelledby="campaign-title">
+        <div class="campaign-copy">
+          <p class="home-eyebrow">The giving leaderboard</p>
+          <h1 id="campaign-title">
+            ${config.publicCampaign ? config.campaignHeadline : 'Advertise by giving.'}
+          </h1>
+          <p class="campaign-deck">Give more. Rank higher. Get seen.</p>
+        </div>
+        <div class="campaign-status" aria-label="Campaign status">
+          <p class="campaign-total">
+            <strong>${formatMoney(data.grossCents)}</strong>
+            <span>confirmed giving</span>
+          </p>
+          ${config.publicCampaign
+            ? html`<p class="charity-total">
+                <strong>${formatMoney(data.charityCents)}</strong> to charity
+              </p>`
+            : ''}
+          ${heroCta}
+        </div>
+      </section>
 
-    <section class="leaderboard shell" aria-labelledby="leaderboard-title">
-      <div class="board-heading">
-        <h2 id="leaderboard-title">The board</h2>
-        <p>More given means a higher rank. Ties go to the earlier listing.</p>
-      </div>
-      ${board.length > 0
-        ? html`<div class="listing-stack">${board}</div>`
-        : html`<div class="empty-board">
-            <p>The board is empty.</p>
-            <strong>The first confirmed listing takes #1.</strong>
-          </div>`}
-    </section>
-  </main>`;
+      <section class="leaderboard shell" aria-labelledby="leaderboard-title">
+        <div class="board-heading">
+          <div>
+            <p class="board-kicker">Ranked by confirmed contributions</p>
+            <h2 id="leaderboard-title">Leaderboard</h2>
+          </div>
+          <p>Ties go to the listing that reached its total first.</p>
+        </div>
+        ${board.length > 0
+          ? html`<div class="leader-stage">
+                <div class="leader-primary">${leaders[0]}</div>
+                ${leaders.length > 1
+                  ? html`<div class="leader-runners">${leaders.slice(1)}</div>`
+                  : ''}
+              </div>
+              ${remainingListings.length > 0
+                ? html`<div class="listing-stack listing-stack-rest">
+                    ${remainingListings}
+                  </div>`
+                : ''}`
+          : html`<div class="empty-board">
+              <div class="empty-rank" aria-hidden="true">#1</div>
+              <div>
+                <p>First place is open</p>
+                <strong>The first confirmed listing owns the top spot.</strong>
+                <span>No filler listings. No made-up activity.</span>
+              </div>
+            </div>`}
+        <div class="allocation-panel">${allocationStatement(config)}</div>
+      </section>
+    </main>`;
 
   return page(config, { title: 'Outcharity', path: '/', body });
 }
@@ -409,11 +458,22 @@ export function termsPage(config) {
         scams, or impersonation. Outcharity may edit, hide, or remove any listing. Hiding a listing
         does not erase its payment record.
       </p>
-      <h2>Refunds and launch language</h2>
+      <h2>Refunds and disputes</h2>
       <p>
-        Final refund, chargeback, charity-disbursement, and legally required fundraising terms must
-        be approved in writing before checkout opens. Until then, the launch switch remains off and
-        no payment can be accepted.
+        Rank changes are an expected part of the product and do not qualify a payment for a refund.
+        Outcharity will review duplicate or unauthorized charges, billing errors, and failures to
+        provide the purchased listing. When a refund is owed, Outcharity issues a full refund
+        through Stripe to the original payment method. A listing removed for violating the
+        published listing rules does not qualify for a refund; if Outcharity removes a compliant
+        listing for another reason, Outcharity issues a full refund.
+      </p>
+      <p>
+        If the charity allocation has already been initiated, the advertiser still receives any
+        approved full refund and Outcharity bears any charity allocation or processing cost it
+        cannot recover. A refund and a charity-provider record correction are separate operations.
+        If a card issuer has opened a payment dispute, it is handled through Stripe and the
+        applicable card-network process rather than through a simultaneous separate refund.
+        Nothing in these Terms limits rights that cannot legally be waived.
       </p>
       <p>Questions: <a href="mailto:hello@outcharity.com">hello@outcharity.com</a></p>
     </main>`;

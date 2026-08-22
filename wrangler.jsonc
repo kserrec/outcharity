@@ -22,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "outcharity",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "2f25e78f-2b40-4fa9-96d1-3167a25bf989",
       "migrations_dir": "db/migrations"
     }
   ],
@@ -49,11 +49,11 @@
   },
   "vars": {
     "OUTCHARITY_LAUNCH_APPROVED": "false",
-    "SITE_URL": "http://localhost:8787",
-    "CHARITY_NAME": "",
-    "CHARITY_URL": "",
-    "CHARITY_EIN": "",
-    "CHARITY_DISCLOSURE": "",
+    "SITE_URL": "https://outcharity.com",
+    "CHARITY_NAME": "St Jude Childrens Research Hospital",
+    "CHARITY_URL": "https://www.stjude.org",
+    "CHARITY_EIN": "620646012",
+    "CHARITY_DISCLOSURE": "Outcharity is not affiliated with or endorsed by St. Jude Children’s Research Hospital. Each payment purchases advertising and is not represented as a tax-deductible charitable gift by the advertiser. Of each gross payment, 90% is directed to St Jude Childrens Research Hospital through GoodAPI and 10% supports Outcharity. Outcharity separately absorbs payment-processing fees; those fees do not reduce the 90% charity allocation.",
     "CAMPAIGN_HEADLINE": "Buy the top spot. Help the featured charity.",
     "CHARITY_PERCENTAGE": "90",
     "PLATFORM_PERCENTAGE": "10",

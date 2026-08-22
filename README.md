@@ -13,7 +13,11 @@ Outcharity is a public advertising leaderboard where rank is determined by confi
 
 The browser receives ordinary HTML and CSS. JavaScript is limited to amount shortcuts and copy/share controls.
 
-The deployable Worker bundle is about 107 KB compressed. There are two runtime packages: Hono supplies hardened routing and HTML escaping with no transitive packages, and Stripe's official library supplies Checkout and webhook-signature handling with no transitive packages. Wrangler is a development and deployment tool; it and its toolchain do not ship to visitors.
+The locked production Worker bundle was 109.41 KiB compressed at the latest deployment. There are
+two runtime packages: Hono supplies hardened routing and HTML escaping with no transitive packages,
+and Stripe's official library supplies Checkout and webhook-signature handling with no transitive
+packages. Wrangler is a development and deployment tool; it and its toolchain do not ship to
+visitors.
 
 ## Safety gate
 
@@ -21,23 +25,41 @@ Checkout remains closed unless all required charity details, Stripe secrets, the
 
 Version 1 is locked to a 90% charity allocation and a 10% platform allocation. A conflicting runtime value keeps checkout closed and cannot change the public promise. Fractional cents are rounded in the charity's favor. Outcharity absorbs payment-processing fees rather than subtracting them from the charity amount.
 
-The public wording must come from the written approval received from the charity-compliance provider. `GOODAPI_EMAIL.txt` contains the exact request.
+The public wording comes from the standalone-model approval received from GoodAPI's founder.
+`GOODAPI_EMAIL.txt` preserves the exact request, and `PLAN.md` records the approval and verified
+production configuration.
 
 ## Local verification
 
-The four local commands are `npm install`, `npm run db:local`, `npm test`, and `npm run dev`. The production bundle check is `npm run build`.
+A fresh clone uses `npm ci`. The focused release commands are `npm test`, `npm run check`, and
+`npm run build`; local development uses `npm run dev`, and the local D1 migration command is
+`npm run db:local`. The build script passes `/dev/null` as Wrangler's environment file so the
+production bundle check never loads a dotenv file.
 
 Application secrets belong in Cloudflare's encrypted Wrangler secret storage. Non-secret campaign wording belongs in `wrangler.jsonc`. Do not place credentials or campaign overrides in dotenv files.
 
 ## Production resources
 
-The zero UUID in `wrangler.jsonc` is an inert local placeholder. Creating the production D1 database with Wrangler's `--update-config` option replaces it with the real Cloudflare database identifier. The R2 bucket name is `outcharity-logos`.
+`wrangler.jsonc` identifies the production `outcharity` D1 database and the private
+`outcharity-logos` R2 bucket. It contains only non-secret campaign configuration; provider
+credentials remain encrypted Cloudflare Worker secrets.
 
-Cloudflare Workers Logs supplies initial error monitoring. Cloudflare Web Analytics can be enabled from the Cloudflare dashboard without adding browser code.
+Cloudflare Workers Logs supplies error monitoring. Cloudflare Web Analytics is enabled through
+automatic injection for non-EU visitors, without adding an analytics package to the application.
 
 Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs are disabled. GitHub dependency alerts and automatic security updates are enabled. GitHub does not offer native secret scanning for this private repository under the current account features, so the checksum-pinned, MIT-licensed Gitleaks scanner checks full history on every push and pull request until native push protection becomes available.
 
-GoodAPI's charity-donation documentation requires a one-time subscription activation before live donation calls work. Do that only after GoodAPI confirms the standalone agreement, full price, charity eligibility, required public wording, refund process, and exact compliance coverage. Do not enable `OUTCHARITY_LAUNCH_APPROVED` until those answers and the final terms are in place.
+GoodAPI Donations is activated, the production charity record is verified, the live provider key
+is stored as a Worker secret, and the complete flow passed a disposable sandbox rehearsal. Keep
+`OUTCHARITY_LAUNCH_APPROVED=false` until the remaining Phase 6 checks and the explicit Phase 7
+cutover authorization are complete.
+
+## Current launch status
+
+Production is deployed at `https://outcharity.com`, but Checkout is deliberately locked. The
+current homepage presents an honest open #1 position because production has zero advertisers and
+zero contributions. `PLAN.md` is the durable launch checklist, and `HANDOFF.md` records the latest
+deployment evidence and exact continuation point.
 
 ## Payment integrity
 
