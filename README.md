@@ -48,9 +48,9 @@ Cloudflare Workers Logs supplies error monitoring. Cloudflare Web Analytics is e
 automatic injection for non-EU visitors, without adding an analytics package to the application.
 
 Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs
-are disabled. GitHub dependency alerts and automatic security updates are enabled. The
-checksum-pinned Gitleaks scanner checks the repository's full history on every push and pull
-request.
+are disabled. GitHub dependency alerts, automatic security updates, native secret scanning, and
+push protection are enabled. The checksum-pinned Gitleaks scanner also checks the repository's
+full history on every push and pull request.
 
 GoodAPI Donations is activated, the production charity record is verified, the live provider key
 is stored as a Worker secret, and the complete flow passed a disposable sandbox rehearsal. The
@@ -59,10 +59,10 @@ version-controlled production setting, and the live health endpoint confirms Che
 
 ## Current launch status
 
-Production is live at `https://outcharity.com`, and genuine Stripe Checkout is enabled. The current
-homepage presents an honest open #1 position because production has zero advertisers and zero
-contributions. `PLAN.md` is the durable launch checklist, and `HANDOFF.md` records the latest
-deployment evidence and exact continuation point.
+Production is live at `https://outcharity.com`, and genuine Stripe Checkout is enabled. The
+homepage renders its leaderboard from confirmed production contributions rather than fixed sample
+content. `PLAN.md` is the durable launch checklist, and `HANDOFF.md` records the latest deployment
+evidence and exact continuation point.
 
 ## Payment integrity
 
