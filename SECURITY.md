@@ -30,7 +30,9 @@ first so settled decisions are not re-reported unless something has changed.
   before the payment's own confirmation, and even if it names only the charge rather than the
   payment intent (the charge is then resolved through Stripe's API) — and a suspended payment is never delivered and its
   listing is hidden until Kyle reviews it. The payment record itself stays immutable. Partial
-  refunds suspend too; the Terms only ever promise full refunds.
+  refunds suspend too; the Terms only ever promise full refunds. A suspended payment is also
+  removed from the listing's rank total (`total_contributed_cents`), so rank never includes
+  refunded money even if the listing is later un-hidden.
 - **Chargeback liability.** Stripe Checkout requests 3-D Secure on every card payment
   (`request_three_d_secure: 'any'`). When the issuer supports it, the authenticated payment's
   fraud chargeback is the issuer's liability under card-network rules, not Outcharity's; a card
@@ -64,8 +66,9 @@ first so settled decisions are not re-reported unless something has changed.
    account's own refund volume. The Stripe account is dedicated to Outcharity. Accepted
    2026-08-21.
 6. **A won dispute does not lift its suspension automatically.** `charge.dispute.closed` is not
-   handled; after winning a dispute Kyle deletes the `payment_suspensions` row and un-hides the
-   listing by hand. Accepted 2026-08-21 pending the open rank-total ruling in PLAN.md.
+   handled; after winning a dispute Kyle deletes the `payment_suspensions` row (which restores
+   the money to the listing's rank total via trigger) and un-hides the listing by hand.
+   Accepted 2026-08-21.
 
 ## Audit history
 

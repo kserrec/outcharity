@@ -326,11 +326,12 @@ the launch switch still prevents Checkout creation.
   `payment_suspensions`), and a zero-padded `CHARITY_HOLD_DAYS` such as `030` closed checkout
   despite parsing correctly. Settled as not a bug: the strict GoodAPI `amount_cents` comparison
   (the provider's OpenAPI spec declares an integer)
-- [ ] Kyle's ruling needed: a refunded or disputed payment stays inside the advertiser's own
-  `total_contributed_cents` (the rank total) because contribution rows are immutable; today that
-  only matters if Kyle un-hides such a listing by hand after review, when it would rank with
-  refunded dollars included. Options: leave as is and never un-hide a refunded listing, or
-  exclude suspended payments from the rank total too (a trigger change plus tests)
+- [x] Kyle's ruling (2026-08-22): a listing's rank total counts only money that has not been
+  refunded or disputed. Migration `0003_rank_totals_exclude_suspended.sql` recomputes
+  `total_contributed_cents` on every confirmation and whenever a suspension is recorded or
+  lifted; visibility after review remains a manual `is_hidden` update
+- [ ] Apply migration 0003 and deploy (same two commands as the hardening release), then confirm
+  `/health` still reports `checkoutEnabled: true`
 - [ ] Smoke-test the leaderboard, submission, management, success, legal, logo, sitemap, redirect,
   certificate, security-header, and mobile flows
 - [ ] Begin public launch promotion only after every check above passes; do not manufacture a live

@@ -446,3 +446,37 @@ test('suspension checks never let a missing payment intent hide other money or b
     () => db.prepare("INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES ('', 'test')").run(),
   );
 });
+
+test('a listing rank total counts only money that has not been refunded or disputed', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  const leaderId = '13131313-1313-4313-8313-131313131313';
+  const rivalId = '14141414-1414-4414-8414-141414141414';
+  await recordConfirmedContribution(db, record({ advertiserId: leaderId, sessionId: 'cs_l1', paymentIntentId: 'pi_l1', amount: 10_000, advertiser: advertiser(leaderId, 'Leader') }));
+  await recordConfirmedContribution(db, record({ advertiserId: leaderId, sessionId: 'cs_l2', paymentIntentId: 'pi_l2', amount: 10_000 }));
+  await recordConfirmedContribution(db, record({ advertiserId: rivalId, sessionId: 'cs_r1', paymentIntentId: 'pi_r1', amount: 15_000, advertiser: advertiser(rivalId, 'Rival') }));
+  const total = async (id) =>
+    (await db.prepare('SELECT total_contributed_cents AS t FROM advertisers WHERE id = ?').bind(id).first()).t;
+  assert.equal(await total(leaderId), 20_000);
+
+  // A refund on one payment drops that payment from the rank total and reorders the board.
+  await db.prepare("INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES ('pi_l2', 'charge.refunded')").run();
+  assert.equal(await total(leaderId), 10_000);
+  assert.equal(await total(rivalId), 15_000);
+  assert.deepEqual((await getLeaderboard(db)).advertisers.map((row) => row.name), ['Rival', 'Leader']);
+
+  // A later confirmation for an already-suspended payment never adds to the total either.
+  await db.prepare("INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES ('pi_l3', 'charge.refunded')").run();
+  await recordConfirmedContribution(db, record({ advertiserId: leaderId, sessionId: 'cs_l3', paymentIntentId: 'pi_l3', amount: 50_000 }));
+  assert.equal(await total(leaderId), 10_000);
+
+  // Confirming a suspended payment also hid the listing pending review.
+  assert.deepEqual((await getLeaderboard(db)).advertisers.map((row) => row.name), ['Rival']);
+
+  // Lifting a suspension (a won dispute) restores the money to the rank total; visibility is
+  // still Kyle's manual review decision.
+  await db.prepare("DELETE FROM payment_suspensions WHERE stripe_payment_intent_id = 'pi_l2'").run();
+  assert.equal(await total(leaderId), 20_000);
+  await db.prepare('UPDATE advertisers SET is_hidden = 0 WHERE id = ?').bind(leaderId).run();
+  assert.deepEqual((await getLeaderboard(db)).advertisers.map((row) => row.name), ['Leader', 'Rival']);
+});

@@ -570,7 +570,8 @@ test('a refund or dispute that arrives before the payment confirmation hides the
   assert.deepEqual(await completed.json(), { received: true, counted: true });
   const row = await db.prepare('SELECT is_hidden, total_contributed_cents FROM advertisers WHERE id = ?').bind(advertiserId).first();
   assert.equal(row.is_hidden, 1);
-  assert.equal(row.total_contributed_cents, 1_000);
+  // Refunded money never counts toward the rank total.
+  assert.equal(row.total_contributed_cents, 0);
   const board = await app.request('http://localhost/', {}, env, { waitUntil() {} });
   assert.doesNotMatch(await board.text(), /Webhook Company/);
 

@@ -12,8 +12,9 @@ after the live Checkout Session probe). It becomes stale when Phase 7 in `PLAN.m
   automatic hiding of refunded or disputed listings, a live-mode-only production rule, mandatory
   3-D Secure, a $100,000 cap, rewritten Terms (refunds within 30 days, then final), logo
   dimension caps, IPv6 rate-limit buckets, invocation logs disabled, and 69 tests. `SECURITY.md`
-  records the threat model and decisions. Resume at the next unfinished Phase 7 item: Kyle's
-  rank-total ruling, then the public smoke test and first-purchase monitoring.
+  records the threat model and decisions. Kyle ruled that rank totals exclude refunded money
+  (migration 0003, committed, **not yet applied or deployed**). Resume there: apply 0003,
+  deploy, check `/health`; then Kyle's own live purchase test and first-delivery monitoring.
 
 - Phase 6 is complete. Kyle confirmed receipt of the final `hello@outcharity.com` delivery test;
   the observed final Stripe status and the successful Stripe and GoodAPI production probes complete

@@ -73,7 +73,7 @@ deployment evidence and exact continuation point.
 - Expired new-listing Checkout Sessions delete their unused uploaded logos.
 - Logos are served only for confirmed, visible advertisers and cached for at most one minute, so hiding a listing also revokes its public image promptly.
 - Public leaderboard HTML is cached for five seconds; successful webhook insertion invalidates the local edge copy immediately.
-- A signed `charge.refunded` or `charge.dispute.created` event hides the affected listing and invalidates the local edge copies of the homepage and logo; the payment record is never altered. A suspension that arrives before the payment's confirmation is stored and applied when the confirmation lands, and a suspended payment never sends money to charity.
+- A signed `charge.refunded` or `charge.dispute.created` event hides the affected listing, removes that payment from the listing's rank total and from the public totals, and invalidates the local edge copies of the homepage and logo; the payment record itself is never altered. A suspension that arrives before the payment's confirmation is stored and applied when the confirmation lands, and a suspended payment never sends money to charity.
 - Outside local development, checkout requires a live-mode Stripe key and the webhook refuses non-live events, so a test-mode configuration can never create a live listing or charity delivery.
 
 `SECURITY.md` records the threat model, the accepted trust decisions, and the audit history.
