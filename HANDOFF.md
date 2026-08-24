@@ -1,12 +1,10 @@
 # Outcharity session handoff
 
-This handoff is current through commit `54cd151` reaching `origin/main` on 2026-08-24. That commit
-has **not** been deployed: Wrangler 4.125.0 reported that the saved Cloudflare OAuth token expired
-and cannot be refreshed from Codex's non-interactive terminal. It becomes stale when Kyle completes
-`npx wrangler login` in his own terminal, on the next production Worker deploy, or on private
-reconciliation of the first confirmed public listing.
+This handoff is current through the production deployment and read-only smoke test of runtime commit
+`54cd151` on 2026-08-24. It becomes stale on the next runtime-affecting commit, production Worker
+deploy, or private reconciliation of the first confirmed public listing.
 
-## Current pending deployment
+## Current production deployment
 
 - `main` and `origin/main` contain `54cd151` (`Harden public traffic and surface charity
   allocation`). It adds the high-contrast 90% charity banner, shared per-location checkout and
@@ -15,15 +13,19 @@ reconciliation of the first confirmed public listing.
 - All 87 tests pass, `npm run check` passes, `git diff --check` passes, and the build passes with
   `/dev/null` as Wrangler's environment file. The dry-run upload is 850.56 KiB raw and 121.69 KiB
   compressed.
-- Production still runs the previously deployed source. The most recent verified production
-  version recorded in `PLAN.md` is `6dd38ec9-37e9-4aa9-a81a-f171aed8a714`, with
-  `ae4b56be-8208-4cab-b3a5-fe0a05819476` as its immediate rollback target; this session could not
-  re-query Cloudflare after authentication expired.
-- The next step is exactly one interactive action: from this repository, Kyle runs
-  `npx wrangler login` in his own terminal and tells Codex when it succeeds. Codex then verifies
-  `wrangler whoami`, deploys commit `54cd151` with `/dev/null` explicitly supplied as the environment
-  file, checks the live health/homepage/stats/stylesheet behavior without creating a payment, and
-  replaces this pending section with the deployed version and rollback evidence.
+- Worker version `13a426f0-6603-4345-bfda-25d0bd3477a4` receives 100% of production traffic. It
+  replaced `5cb3f64a-461a-4938-badf-6d32d8e36afe`, which is the immediate rollback target. Wrangler
+  4.125.0 uploaded the changed stylesheet, reported a 7 ms startup time, retained the custom domain
+  and 15-minute schedule, and loaded no dotenv file because deployment explicitly used `/dev/null`.
+- Live read-only checks return 200 for health, homepage, stylesheet, and stats. Checkout remains
+  enabled; the banner precedes the metrics, navigation, and hero; it links to St. Jude; the detailed
+  lower disclosure remains; desktop and mobile banner CSS is deployed; and homepage/stats responses
+  carry the expected five-second cache policy, CSP, and HSTS. No payment or private record was
+  created during verification.
+- At the smoke test, public stats report `$7` paid, `$6.30` to charity, four payments, four visible
+  advertisers, a `$1.75` average, and 444 Website visits. The delivery ledger partitions all
+  `$96.30` of recorded charity shares into `$0` provider-accepted, `$96.30` awaiting provider, and
+  `$0` stopped before delivery.
 
 ## Exact stop point
 
@@ -34,13 +36,11 @@ reconciliation of the first confirmed public listing.
   inert Stripe-shaped test fixtures added in historical commit `d63d4cf`; it does not weaken any
   detection rule or exclude any source path. GitHub Security runs `32593742789` and `32594745669`
   pass, and native GitHub secret scanning plus push protection are enabled.
-- Production runs Worker version `bcd1a77d-8d52-4843-ba85-70aaebdf5f31`, deployed from the source
-  now recorded on `main`. It replaced version `f2dd830d-1dcf-4e5c-a666-b055e526bbd7`, which is the
-  immediate rollback target. The deployment includes the current visual refresh, recent-activity strip,
-  one-dollar minimum, campaign headline, one-row mobile leaderboard, public `/stats` work, permanent
-  primary-navigation Stats link, and Cloudflare-backed visit total. Those runtime changes and their
-  verification evidence are committed, so `origin/main` is the recovery source for the deployed
-  version.
+- Production runs Worker version `13a426f0-6603-4345-bfda-25d0bd3477a4`, deployed from runtime
+  commit `54cd151` on `main`. It replaced version `5cb3f64a-461a-4938-badf-6d32d8e36afe`, which is
+  the immediate rollback target. The deployment includes the prior launch work plus the 90% banner,
+  shared cost brakes, stats caching/invalidation, and invalid-signature log suppression. The source
+  and verification evidence are committed, so `origin/main` is the recovery source.
 - Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. The homepage now shows a confirmed
   four-entry leaderboard and links to Stats from the primary navigation, campaign panel, and footer.
   `/stats` returns six aggregate cards, its canonical URL is correct, the sitemap includes it, and
@@ -49,31 +49,27 @@ reconciliation of the first confirmed public listing.
   board: `$7` paid and `$6.30` allocated to charity. The hidden founder `$100` contribution no longer
   affects those public numbers; its matching Stripe event, D1 rows, charity hold state, and eventual
   GoodAPI record have not been privately reconciled.
-- The sixth card reports 369 Website visits from the first successful Cloudflare Web Analytics sync
-  at `2026-08-24T04:30:48.628Z`. This is an aggregate entry count rather than unique people or page
-  views; bots are excluded, and European visits are absent because the existing automatic-injection
-  setup does not collect them. D1 retains only daily counts and fetch timestamps.
+- The sixth card reported 444 Website visits at the current smoke test. This is an aggregate entry
+  count rather than unique people or page views; bots are excluded, and European visits are absent
+  because the existing automatic-injection setup does not collect them. D1 retains only daily
+  counts and fetch timestamps.
 
 ## Release verification
 
-- All 83 tests pass, `npm run check` passes, `git diff --check` passes, and `npm run build` passes
-  while explicitly using `/dev/null` as Wrangler's environment file. The Worker upload is 837.79
-  KiB raw and 119.03 KiB compressed, with a 5 ms startup time.
-- Production D1 applied only `0004_web_analytics.sql`; both new tables were verified empty before
-  deployment, and Wrangler then reported no pending migrations. Wrangler 4.125.0 deployed the
-  Worker to the `outcharity.com` custom domain with no additional asset upload and retained the
-  15-minute scheduled trigger.
+- All 87 tests pass, `npm run check` passes, `git diff --check` passes, and `npm run build` passes
+  while explicitly using `/dev/null` as Wrangler's environment file. The Worker upload is 850.56
+  KiB raw and 121.69 KiB compressed, with a 7 ms startup time.
+- This deployment adds no migration. Wrangler 4.125.0 deployed the Worker to the `outcharity.com`
+  custom domain, uploaded the changed stylesheet, and retained the 15-minute scheduled trigger.
 - `npm audit` and `npm audit --omit=dev` both report zero vulnerabilities. GitHub Dependabot has
   zero open alerts and automatic security updates remain enabled.
 - The checksum-pinned Gitleaks 8.30.1 archive matches SHA-256
   `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; the exact CI command scans
   full Git history while explicitly excluding every dotenv pattern and reports no leak.
-- Live read-only checks after this deployment pass for health, homepage, `/stats`, sitemap, and the
-  deployed stylesheet. The live homepage reports `$7` paid and `$6.30` to charity; `/stats` reports
-  those values plus four payments, four advertisers, a `$1.75` average, and 369 Website visits.
-  Exact 320 px Chrome device emulation from the prior navigation deployment shows the wordmark plus
-  Leaderboard, Stats, About, and Rules on one line with no horizontal overflow; the current deploy
-  changed no asset.
+- Live read-only checks after this deployment pass for health, homepage, `/stats`, and the deployed
+  stylesheet. The live homepage contains the correctly ordered 90% banner and lower disclosure;
+  `/stats` reports `$7` paid, `$6.30` to charity, four payments, four advertisers, a `$1.75` average,
+  and 444 Website visits. The current deploy changed only `styles.css` among static assets.
 
 ## Production state that remains in force
 

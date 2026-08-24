@@ -518,6 +518,15 @@ every charity share.
 - [x] Cache `/stats` for five seconds with one query-independent key, put homepage and stats D1
   cache misses behind one shared lookup counter, purge both public-data cache entries after a
   confirmed payment or listing suspension, and stop logging unsigned hostile webhook probes.
+- [x] Deploy this first server-side hardening chunk together with the homepage allocation banner,
+  before the remaining Turnstile and account-control work.
+  - All 87 tests, syntax checking, the dotenv-isolated 121.69 KiB compressed dry build, and diff
+    checks pass. GitHub's secret-history scan passes for runtime commit `54cd151`
+  - Worker version `13a426f0-6603-4345-bfda-25d0bd3477a4` receives 100% of production traffic;
+    `5cb3f64a-461a-4938-badf-6d32d8e36afe` is the immediate rollback target
+  - Live health, homepage, stylesheet, and stats checks pass without creating a payment. Checkout
+    remains enabled; the banner and mobile styles are deployed; stats uses the five-second cache
+    policy; and CSP and HSTS remain present
 - [ ] Create one managed Turnstile widget for `outcharity.com`, `localhost`, and `127.0.0.1`; verify
   a one-use token server-side on both checkout routes with separate expected actions, the expected
   hostname, the connecting IP, a 2,048-character token cap, and a ten-second verification timeout.
@@ -528,10 +537,11 @@ every charity share.
   requests, add the available pre-Worker rate-limit protection for checkout without touching the
   Stripe webhook path, and enable practical spend notifications without claiming they are a hard
   billing cap.
-- [ ] Run focused and full tests, syntax checking, a dotenv-isolated dry build, and diff checks;
-  have a fresh agent cold-review the completed hardening; deploy only after checkout remains fully
-  configured; then validate Turnstile, checkout refusal, cache behavior, security headers, health,
-  and rollback state in production without creating a payment.
+- [ ] After the remaining Turnstile and account-control work, run focused and full tests, syntax
+  checking, a dotenv-isolated dry build, and diff checks; have a fresh agent cold-review the
+  completed hardening; deploy only after checkout remains fully configured; then validate
+  Turnstile, checkout refusal, cache behavior, security headers, health, and rollback state in
+  production without creating a payment.
 
 Exit: Network floods are handled at Cloudflare's edge, automated checkout abuse is challenged
 before R2 or Stripe work, downstream paid resources have layered cost brakes, and account-level
