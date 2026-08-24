@@ -71,7 +71,7 @@ test('the webhook route rejects a forged paid event before fulfillment', async (
   const db = new TestD1Database();
   const originalFetch = globalThis.fetch;
   let donationCalls = 0;
-  context.mock.method(console, 'error', () => {});
+  const errors = context.mock.method(console, 'error', () => {});
   globalThis.fetch = async (_url, options) => {
     donationCalls += 1;
     const request = JSON.parse(options.body);
@@ -110,6 +110,12 @@ test('the webhook route rejects a forged paid event before fulfillment', async (
   const count = await db.prepare('SELECT COUNT(*) AS count FROM contributions').first();
   assert.equal(count.count, 0);
   assert.equal(donationCalls, 0);
+  assert.equal(
+    errors.mock.calls.some(
+      (call) => call.arguments[0] === 'Stripe webhook signature verification failed.',
+    ),
+    false,
+  );
 });
 
 test('the signed webhook counts a paid session once and an unpaid session zero times', async (context) => {
@@ -204,8 +210,8 @@ test('the signed webhook counts a paid session once and an unpaid session zero t
   assert.equal(advertiser.total_contributed_cents, 1_000);
   // The charity share is held, not sent at confirmation time.
   assert.equal(donationCalls, 0);
-  // Only the first (inserted) confirmation purges the cached homepage.
-  assert.deepEqual(purged, ['/']);
+  // Only the first (inserted) confirmation purges the two cached public data pages.
+  assert.deepEqual(purged, ['/', '/stats']);
   const held = await db.prepare('SELECT charity_delivery_status FROM contributions').first();
   assert.equal(held.charity_delivery_status, 'pending');
 });
@@ -510,11 +516,11 @@ test('a signed refund or dispute hides the paid listing and purges its public ca
     assert.equal(row.is_hidden, 1, type);
     if (type === 'charge.dispute.created') {
       assert.deepEqual(body, { received: true, counted: false, hidden: true });
-      assert.deepEqual(deleted.sort(), ['/', `/logos/${advertiserId}.png`]);
+      assert.deepEqual(deleted.sort(), ['/', `/logos/${advertiserId}.png`, '/stats']);
     } else {
       // Already hidden: the second event is idempotent and purges nothing.
       assert.deepEqual(body, { received: true, counted: false, hidden: false });
-      assert.equal(deleted.length, 2);
+      assert.equal(deleted.length, 3);
     }
   }
 

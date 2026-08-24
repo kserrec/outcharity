@@ -75,6 +75,33 @@ a {
   text-decoration: none;
 }
 
+.home-allocation-banner {
+  border-bottom: 1px solid var(--ink);
+  background: var(--sun);
+}
+
+.home-allocation-banner p {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28em;
+  margin-block: 0;
+  font-size: 0.9rem;
+  font-weight: 750;
+  text-align: center;
+}
+
+.home-allocation-banner strong {
+  font-size: 1.25rem;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+}
+
+.home-allocation-banner a {
+  font-weight: 900;
+}
+
 .home-stats-strip {
   border-bottom: 1px solid var(--line);
   background: var(--card);
@@ -1256,6 +1283,19 @@ small,
   .home-header {
     min-height: 56px;
     gap: 14px;
+  }
+
+  .home-allocation-banner p {
+    min-height: 42px;
+    flex-wrap: wrap;
+    gap: 0 0.25em;
+    padding-block: 6px;
+    font-size: 0.75rem;
+    line-height: 1.2;
+  }
+
+  .home-allocation-banner strong {
+    font-size: 1rem;
   }
 
   .home-stats-strip-inner {

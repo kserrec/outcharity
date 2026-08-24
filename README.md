@@ -7,7 +7,7 @@ Outcharity is a public advertising leaderboard where rank is determined by confi
 - One Hono application on Cloudflare Workers
 - D1 for advertisers, immutable contribution amounts, and daily aggregate visit totals
 - R2 for validated PNG, JPEG, and WebP logos
-- Cloudflare Cache API for five-second leaderboard caching
+- Cloudflare Cache API for five-second homepage and stats caching
 - Stripe Checkout and signed webhooks
 - GoodAPI charity donations with provider-side idempotency
 
@@ -105,8 +105,8 @@ evidence and exact continuation point.
 - Checkout requests 3-D Secure authentication on every card payment (`request_three_d_secure: 'any'`). When the issuer supports it, fraud-chargeback liability for that payment sits with the card issuer under card-network rules; cards not enrolled in 3-D Secure proceed without it and remain the one residual fraud exposure.
 - Expired new-listing Checkout Sessions delete their unused uploaded logos.
 - Logos are served only for confirmed, visible advertisers and cached for at most one minute, so hiding a listing also revokes its public image promptly.
-- Public leaderboard HTML is cached for five seconds; successful webhook insertion invalidates the local edge copy immediately.
-- A signed `charge.refunded` or `charge.dispute.created` event hides the affected listing, removes that payment from the listing's rank total and from the public totals, and invalidates the local edge copies of the homepage and logo; the payment record itself is never altered. A suspension that arrives before the payment's confirmation is stored and applied when the confirmation lands, and a suspended payment never sends money to charity.
+- Public homepage and stats HTML are cached for five seconds; successful webhook insertion invalidates both local edge copies immediately.
+- A signed `charge.refunded` or `charge.dispute.created` event hides the affected listing, removes that payment from the listing's rank total and from the public totals, and invalidates the local edge copies of the homepage, stats page, and logo; the payment record itself is never altered. A suspension that arrives before the payment's confirmation is stored and applied when the confirmation lands, and a suspended payment never sends money to charity.
 - Outside local development, checkout requires a live-mode Stripe key and the webhook refuses non-live events, so a test-mode configuration can never create a live listing or charity delivery.
 
 `SECURITY.md` records the threat model, the accepted trust decisions, and the audit history.

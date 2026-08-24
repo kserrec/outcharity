@@ -498,7 +498,42 @@ charity-delivery behavior remains intact.
     and `$0` stopped
   - The live help page has its canonical URL, all eight verified plain destinations, the promised
     outside-action disclosure, and `no-store`, CSP, HSTS, referrer-policy, and frame-denial headers
+- [x] Put the approved 90% charity-allocation promise in a high-contrast banner before the homepage
+  metrics, navigation, and hero so it is visible without scrolling on desktop and mobile. Keep the
+  lower detailed disclosure for the 10% platform share, payment-fee promise, and non-affiliation
+  language.
 
 Exit: Visitors have a trustworthy non-advertising path to direct giving, researched giving, and
 non-monetary service, while the stats page publishes an exact aggregate record of what happened to
 every charity share.
+
+## Phase 11 — DDoS and denial-of-wallet hardening
+
+- [x] Verify the live traffic path and distinguish Cloudflare's network-level DDoS mitigation from
+  application-layer cost controls. Record that Workers Rate Limiting and the Cache API execute
+  after a Worker invocation and operate independently in each Cloudflare location.
+- [x] Put one shared checkout counter in front of both anonymous checkout paths while preserving
+  their per-client counters, body limits, validation, R2-before-Stripe consistency rule, payment
+  allocation, webhook authority, and charity-delivery behavior.
+- [x] Cache `/stats` for five seconds with one query-independent key, put homepage and stats D1
+  cache misses behind one shared lookup counter, purge both public-data cache entries after a
+  confirmed payment or listing suspension, and stop logging unsigned hostile webhook probes.
+- [ ] Create one managed Turnstile widget for `outcharity.com`, `localhost`, and `127.0.0.1`; verify
+  a one-use token server-side on both checkout routes with separate expected actions, the expected
+  hostname, the connecting IP, a 2,048-character token cap, and a ten-second verification timeout.
+  Store the secret only in Cloudflare's encrypted Worker secret store and keep checkout closed if
+  either Turnstile binding is missing outside local development.
+- [ ] Inspect the account's actual Workers plan, CPU metrics, zone security features, existing
+  rules, and billing notifications. Set the lowest CPU ceiling supported by measured legitimate
+  requests, add the available pre-Worker rate-limit protection for checkout without touching the
+  Stripe webhook path, and enable practical spend notifications without claiming they are a hard
+  billing cap.
+- [ ] Run focused and full tests, syntax checking, a dotenv-isolated dry build, and diff checks;
+  have a fresh agent cold-review the completed hardening; deploy only after checkout remains fully
+  configured; then validate Turnstile, checkout refusal, cache behavior, security headers, health,
+  and rollback state in production without creating a payment.
+
+Exit: Network floods are handled at Cloudflare's edge, automated checkout abuse is challenged
+before R2 or Stripe work, downstream paid resources have layered cost brakes, and account-level
+limits and notifications reduce denial-of-wallet exposure without claiming an impossible absolute
+guarantee against every charge.

@@ -136,7 +136,7 @@ export function rateLimitClientKey(address) {
   return `${groups.slice(0, 4).map((group) => group.padStart(4, '0')).join(':')}::/64`;
 }
 
-export async function requireRateLimit(request, limiter, scope) {
+async function requireRateLimitKey(request, limiter, key) {
   if (!limiter?.limit) {
     if (isLocalRequest(request)) return;
     await request.body?.cancel();
@@ -145,14 +145,25 @@ export async function requireRateLimit(request, limiter, scope) {
     throw error;
   }
 
-  const clientAddress = rateLimitClientKey(request.headers.get('CF-Connecting-IP'));
-  const { success } = await limiter.limit({ key: `${scope}:${clientAddress}` });
+  const { success } = await limiter.limit({ key });
   if (!success) {
     await request.body?.cancel();
     const error = new Error('Too many requests. Please wait a minute and try again.');
     error.status = 429;
     throw error;
   }
+}
+
+export function requireRateLimit(request, limiter, scope) {
+  const clientAddress = rateLimitClientKey(request.headers.get('CF-Connecting-IP'));
+  return requireRateLimitKey(request, limiter, `${scope}:${clientAddress}`);
+}
+
+// A shared key caps aggregate work within one Cloudflare location even when requests come from
+// many client addresses. Cloudflare's counters are intentionally permissive and eventually
+// consistent, so this is a cost brake rather than exact accounting.
+export function requireSharedRateLimit(request, limiter, scope) {
+  return requireRateLimitKey(request, limiter, `${scope}:all`);
 }
 
 function bodyTooLarge() {
@@ -247,6 +258,10 @@ export function publicCacheKey(request) {
   return cacheKeyFor(request, '/');
 }
 
+export function publicStatsCacheKey(request) {
+  return cacheKeyFor(request, '/stats');
+}
+
 export function publicAssetCacheKey(request) {
   return cacheKeyFor(request);
 }
@@ -258,6 +273,13 @@ async function invalidateCacheKey(key) {
 
 export function invalidatePublicHomepage(request) {
   return invalidateCacheKey(publicCacheKey(request));
+}
+
+export function invalidatePublicPages(request) {
+  return Promise.all([
+    invalidatePublicHomepage(request),
+    invalidateCacheKey(publicStatsCacheKey(request)),
+  ]);
 }
 
 export function invalidatePublicLogo(request, logoKey) {

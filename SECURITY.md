@@ -24,11 +24,19 @@ the same private email thread.
   that emoji and Persian/Indic scripts need are kept), logos checked by file signature and by
   the pixel dimensions declared in their headers (at most 2048 × 2048), and
   stored under server-chosen keys. Logos are served only for confirmed, visible listings.
-- Form posts require a matching `Origin` header and pass per-client rate limits keyed on the
-  IPv4 address or the IPv6 /64 block. The management credential is returned to the browser only
-  in a `__Host-` HttpOnly cookie, which the success and return pages read; form posts never
-  depend on it.
+- Form posts require a matching `Origin` header and pass both a per-client limit keyed on the
+  IPv4 address or IPv6 /64 block and one shared checkout limit. The shared key limits aggregate
+  R2 and Stripe work from distributed clients within each Cloudflare location. These Worker
+  counters are permissive and eventually consistent, so they are a cost brake rather than exact
+  accounting or a replacement for pre-Worker filtering. The management credential is returned
+  to the browser only in a `__Host-` HttpOnly cookie, which the success and return pages read;
+  form posts never depend on it.
 - Request bodies are capped while streaming; unreadable bodies are refused with 400.
+- Homepage and `/stats` database reads occur only on a five-second, query-independent Cache API
+  miss and share one aggregate lookup limit within each Cloudflare location. The Cache API saves
+  D1 work but still executes inside the Worker; it does not make those requests unbillable.
+- Invalid Stripe webhook signatures return 400 without creating one application log entry per
+  hostile request. Signed mode mismatches and fulfillment failures remain logged.
 - Outbound Stripe calls time out after 20 seconds with one retry; GoodAPI calls after 10 seconds.
 - Strict Content Security Policy, HSTS, frame denial, and `nosniff` on every response; private
   pages additionally send `Referrer-Policy: origin`, `no-store`, and `noindex`.
@@ -78,6 +86,13 @@ the same private email thread.
    handled; after winning a dispute Kyle deletes the `payment_suspensions` row (which restores
    the money to the listing's rank total via trigger) and un-hides the listing by hand.
    Accepted 2026-08-21.
+
+## Open operational hardening
+
+- Turnstile on both checkout forms, a pre-Worker zone rate-limit rule, an evidence-based Worker
+  CPU ceiling, and billing notifications still require authenticated access to the Cloudflare
+  account. This session has no `CLOUDFLARE_API_TOKEN`; the repository changes therefore must not
+  be described as preventing every Worker invocation or guaranteeing a maximum bill.
 
 ## Audit history
 

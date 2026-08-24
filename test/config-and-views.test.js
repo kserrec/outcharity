@@ -611,6 +611,41 @@ test('recent activity is recency-only, capped at three, compact, and below the l
   assert.match(mobileLogo, /display:\s*none/);
 });
 
+test('homepage leads with the charity allocation on desktop and mobile', () => {
+  const environment = completeEnvironment({
+    CHARITY_NAME: 'St Jude Childrens Research Hospital',
+    CHARITY_URL: 'https://www.stjude.org',
+  });
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(
+    homePage(config, { grossCents: 0, charityCents: 0, advertisers: [] }),
+  );
+  const bannerIndex = document.indexOf('class="home-allocation-banner"');
+  const statsIndex = document.indexOf('class="home-stats-strip"');
+  const headerIndex = document.indexOf('class="home-header shell"');
+  const mainIndex = document.indexOf('class="home-main"');
+  const banner = document.slice(bannerIndex, statsIndex);
+
+  assert.ok(bannerIndex >= 0 && bannerIndex < statsIndex);
+  assert.ok(statsIndex < headerIndex && headerIndex < mainIndex);
+  assert.match(banner, /<strong>90%<\/strong> of every contribution goes to/);
+  assert.match(banner, /href="https:\/\/www\.stjude\.org"/);
+  assert.match(banner, />St Jude Childrens Research Hospital<\/a>/);
+  assert.match(banner, /aria-label="Charity allocation"/);
+
+  const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobileStart = styles.indexOf('@media (max-width: 760px)');
+  const mobileEnd = styles.indexOf('@media (max-width: 350px)');
+  const desktopBanner =
+    styles.slice(0, mobileStart).match(/\.home-allocation-banner\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileBanner =
+    styles.slice(mobileStart, mobileEnd).match(/\.home-allocation-banner p\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.match(desktopBanner, /background:\s*var\(--sun\)/);
+  assert.doesNotMatch(mobileBanner, /display:\s*none/);
+  assert.match(mobileBanner, /min-height:\s*42px/);
+});
+
 test('mobile homepage leaves only the CTA visible in the unframed campaign status', () => {
   const environment = completeEnvironment();
   const config = getConfig(environment, environment.SITE_URL);
@@ -895,7 +930,10 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   const document = await response.text();
 
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.equal(
+    response.headers.get('Cache-Control'),
+    'public, max-age=5, s-maxage=5, must-revalidate',
+  );
   assert.equal(prepareCalls, 1);
   assert.match(document, /Total paid[\s\S]*?\$12\.34/);
   assert.match(document, /To charity[\s\S]*?\$11\.11/);

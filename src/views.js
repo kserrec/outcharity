@@ -67,6 +67,17 @@ function homeStat(value, label) {
   </li>`;
 }
 
+function homeAllocationBanner(config) {
+  if (!config.publicCampaign) return '';
+
+  return html`<aside class="home-allocation-banner" aria-label="Charity allocation">
+    <p class="shell">
+      <strong>${config.charityPercentage}%</strong> of every contribution goes to
+      <a href="${config.charityUrl}" target="_blank" rel="noopener">${config.charityName}</a>.
+    </p>
+  </aside>`;
+}
+
 function homeStatsStrip(data) {
   const advertiserCount = data.advertiserCount ?? data.advertisers?.length ?? 0;
   const items = [
@@ -94,8 +105,8 @@ function homeStatsStrip(data) {
   </div>`;
 }
 
-function homeHeader(data) {
-  return html`${homeStatsStrip(data)}
+function homeHeader(config, data) {
+  return html`${homeAllocationBanner(config)} ${homeStatsStrip(data)}
     <header class="home-header shell">
       <a class="wordmark" href="/" aria-label="Outcharity home">Outcharity</a>
       <nav aria-label="Primary navigation">
@@ -207,7 +218,7 @@ export function homePage(config, data) {
     ? html`<a class="button button-primary" href="/submit">Get on the board</a>`
     : html`<span class="button button-disabled" aria-disabled="true">Opening after final checks</span>`;
 
-  const body = html`${homeHeader(data)}
+  const body = html`${homeHeader(config, data)}
     <main class="home-main">
       <section class="campaign-mast shell" aria-labelledby="campaign-title">
         <div class="campaign-copy">

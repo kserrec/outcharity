@@ -29,14 +29,16 @@ import {
   applySecurityHeaders,
   canonicalOriginResponse,
   htmlResponse,
-  invalidatePublicHomepage,
   invalidatePublicLogo,
+  invalidatePublicPages,
   isPrivatePath,
   publicAssetCacheKey,
   publicCacheKey,
+  publicStatsCacheKey,
   readFormDataWithinLimit,
   readTextWithinLimit,
   requireRateLimit,
+  requireSharedRateLimit,
   requireSameOrigin,
   shouldUseStrictTransport,
 } from './http.js';
@@ -217,6 +219,7 @@ app.get('/', async (context) => {
     if (cached) return cached;
   }
 
+  await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'public-data');
   const config = configFor(context);
   const data = context.env.DB
     ? await getLeaderboard(context.env.DB)
@@ -261,6 +264,7 @@ app.post('/checkout', async (context) => {
   if (!config.checkoutEnabled) return checkoutClosed(context, config);
   requireSameOrigin(context.req.raw);
   await requireRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'new-checkout');
+  await requireSharedRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'checkout');
   const formData = await readFormDataWithinLimit(context.req.raw, NEW_CHECKOUT_BODY_LIMIT);
   const values = safeFormValues(formData);
   const { listing, logo, errors, message } = await validateSubmission(formData, config);
@@ -363,6 +367,7 @@ app.post('/manage/:token/checkout', async (context) => {
     context.env.CHECKOUT_RATE_LIMITER,
     'existing-checkout',
   );
+  await requireSharedRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'checkout');
   const formData = await readFormDataWithinLimit(
     context.req.raw,
     EXISTING_CHECKOUT_BODY_LIMIT,
@@ -423,8 +428,10 @@ async function handleListingSuspension(context, stripe, event) {
     event.type,
   );
   if (hidden) {
-    await invalidatePublicHomepage(context.req.raw);
-    await invalidatePublicLogo(context.req.raw, hidden.logoKey);
+    await Promise.all([
+      invalidatePublicPages(context.req.raw),
+      invalidatePublicLogo(context.req.raw, hidden.logoKey),
+    ]);
   }
   return { ...NOT_COUNTED, hidden: Boolean(hidden) };
 }
@@ -438,7 +445,7 @@ async function handleConfirmedContribution(context, session) {
 
   const result = await recordConfirmedContribution(context.env.DB, record);
   if (!result.contribution) throw new Error('Confirmed contribution was not found after recording.');
-  if (result.inserted) await invalidatePublicHomepage(context.req.raw);
+  if (result.inserted) await invalidatePublicPages(context.req.raw);
   return { received: true, counted: result.inserted };
 }
 
@@ -471,8 +478,9 @@ app.post('/webhooks/stripe', async (context) => {
       signature,
       context.env.STRIPE_WEBHOOK_SECRET,
     );
-  } catch (error) {
-    console.error('Stripe webhook signature verification failed.', { message: error.message });
+  } catch {
+    // Invalid signatures are ordinary hostile input, not an operational failure worth amplifying
+    // into paid logs. Signed mode mismatches and fulfillment failures remain logged below.
     return context.json({ error: 'Invalid webhook signature.' }, 400);
   }
   const config = configFor(context);
@@ -562,6 +570,14 @@ app.get('/logos/*', async (context) => {
 app.get('/about', (context) => htmlResponse(context, aboutPage(configFor(context))));
 app.get('/help', (context) => htmlResponse(context, helpPage(configFor(context))));
 app.get('/stats', async (context) => {
+  const cache = globalThis.caches?.default;
+  const cacheKey = publicStatsCacheKey(context.req.raw);
+  if (cache) {
+    const cached = await cache.match(cacheKey);
+    if (cached) return cached;
+  }
+
+  await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'public-data');
   const stats = context.env.DB
     ? await getPublicStats(context.env.DB)
     : {
@@ -576,7 +592,14 @@ app.get('/stats', async (context) => {
         averagePaymentCents: 0,
         visitCount: null,
       };
-  return htmlResponse(context, statsPage(configFor(context), stats));
+  const response = await htmlResponse(
+    context,
+    statsPage(configFor(context), stats),
+    200,
+    'public, max-age=5, s-maxage=5, must-revalidate',
+  );
+  if (cache) context.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 });
 app.get('/terms', (context) => htmlResponse(context, termsPage(configFor(context))));
 app.get('/privacy', (context) => htmlResponse(context, privacyPage(configFor(context))));

@@ -6,6 +6,7 @@ import {
   readBodyWithinLimit,
   readFormDataWithinLimit,
   requireRateLimit,
+  requireSharedRateLimit,
 } from '../src/http.js';
 import { app } from '../src/index.js';
 import {
@@ -161,18 +162,25 @@ test('rate limiting fails closed in production and cannot be bypassed by omittin
     { status: 503 },
   );
   await requireRateLimit(new Request('http://localhost/success'), undefined, 'success');
+  await requireSharedRateLimit(new Request('http://localhost/checkout'), undefined, 'checkout');
 });
 
-test('rate limits fire before checkout, database, and storage work', async () => {
+test('client and aggregate rate limits fire before checkout, database, and storage work', async () => {
   const checkoutHooks = {};
   const checkoutKeys = [];
   const blockedCheckout = {
     async limit({ key }) {
       checkoutKeys.push(key);
+      return { success: key !== 'checkout:all' };
+    },
+  };
+  const lookupKeys = [];
+  const blockedLookup = {
+    async limit({ key }) {
+      lookupKeys.push(key);
       return { success: false };
     },
   };
-  const blockedLookup = { async limit() { return { success: false }; } };
   const rejectingDatabase = {
     prepare() {
       throw new Error('the database must not be reached');
@@ -221,7 +229,9 @@ test('rate limits fire before checkout, database, and storage work', async () =>
   assert.equal(existingCheckoutHooks.cancelled, true);
   assert.deepEqual(checkoutKeys, [
     'new-checkout:unknown',
+    'checkout:all',
     'existing-checkout:unknown',
+    'checkout:all',
   ]);
 
   for (const [name, url, overrides] of [
@@ -240,6 +250,8 @@ test('rate limits fire before checkout, database, and storage work', async () =>
       'https://outcharity.com/logos/11111111-1111-4111-8111-111111111111.png',
       { LOGOS: rejectingStorage },
     ],
+    ['homepage cache miss', 'https://outcharity.com/', { DB: rejectingDatabase }],
+    ['stats cache miss', 'https://outcharity.com/stats', { DB: rejectingDatabase }],
   ]) {
     const response = await app.fetch(
       new Request(url),
@@ -248,6 +260,75 @@ test('rate limits fire before checkout, database, and storage work', async () =>
     );
     assert.equal(response.status, 429, name);
   }
+  assert.deepEqual(lookupKeys, [
+    'success:unknown',
+    'manage:unknown',
+    'logo:unknown',
+    'public-data:all',
+    'public-data:all',
+  ]);
+});
+
+test('stats query variations share one cache entry and one database read', async (context) => {
+  const originalCaches = globalThis.caches;
+  const entries = new Map();
+  Object.defineProperty(globalThis, 'caches', {
+    configurable: true,
+    value: {
+      default: {
+        async match(request) {
+          return entries.get(request.url)?.clone();
+        },
+        async put(request, response) {
+          entries.set(request.url, response.clone());
+        },
+      },
+    },
+  });
+  context.after(() => {
+    Object.defineProperty(globalThis, 'caches', {
+      configurable: true,
+      value: originalCaches,
+    });
+  });
+
+  let databaseReads = 0;
+  const limiterKeys = [];
+  const environment = launchEnvironment({
+    LOOKUP_RATE_LIMITER: {
+      async limit({ key }) {
+        limiterKeys.push(key);
+        return { success: true };
+      },
+    },
+    DB: {
+      prepare() {
+        databaseReads += 1;
+        return {
+          async first() {
+            return {};
+          },
+        };
+      },
+    },
+  });
+
+  for (const query of ['?source=one', '?source=two', '?ignored=three']) {
+    const response = await app.fetch(
+      new Request(`https://outcharity.com/stats${query}`),
+      environment,
+      executionContext,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get('Cache-Control'),
+      'public, max-age=5, s-maxage=5, must-revalidate',
+    );
+  }
+
+  assert.equal(databaseReads, 1);
+  assert.deepEqual(limiterKeys, ['public-data:all']);
+  assert.deepEqual([...entries.keys()], ['https://outcharity.com/stats']);
 });
 
 test('the public health endpoint performs no database work', async () => {
