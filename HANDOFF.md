@@ -1,8 +1,29 @@
 # Outcharity session handoff
 
-This handoff is current through the Cloudflare-backed public visit count and production smoke test
-on 2026-08-23. It becomes stale on the next runtime-affecting commit, production Worker deploy, or
-private reconciliation of the first confirmed public listing.
+This handoff is current through commit `54cd151` reaching `origin/main` on 2026-08-24. That commit
+has **not** been deployed: Wrangler 4.125.0 reported that the saved Cloudflare OAuth token expired
+and cannot be refreshed from Codex's non-interactive terminal. It becomes stale when Kyle completes
+`npx wrangler login` in his own terminal, on the next production Worker deploy, or on private
+reconciliation of the first confirmed public listing.
+
+## Current pending deployment
+
+- `main` and `origin/main` contain `54cd151` (`Harden public traffic and surface charity
+  allocation`). It adds the high-contrast 90% charity banner, shared per-location checkout and
+  public-data cost brakes, five-second query-independent `/stats` caching, homepage-plus-stats
+  invalidation after money changes, and suppression of logs for invalid webhook signatures.
+- All 87 tests pass, `npm run check` passes, `git diff --check` passes, and the build passes with
+  `/dev/null` as Wrangler's environment file. The dry-run upload is 850.56 KiB raw and 121.69 KiB
+  compressed.
+- Production still runs the previously deployed source. The most recent verified production
+  version recorded in `PLAN.md` is `6dd38ec9-37e9-4aa9-a81a-f171aed8a714`, with
+  `ae4b56be-8208-4cab-b3a5-fe0a05819476` as its immediate rollback target; this session could not
+  re-query Cloudflare after authentication expired.
+- The next step is exactly one interactive action: from this repository, Kyle runs
+  `npx wrangler login` in his own terminal and tells Codex when it succeeds. Codex then verifies
+  `wrangler whoami`, deploys commit `54cd151` with `/dev/null` explicitly supplied as the environment
+  file, checks the live health/homepage/stats/stylesheet behavior without creating a payment, and
+  replaces this pending section with the deployed version and rollback evidence.
 
 ## Exact stop point
 
