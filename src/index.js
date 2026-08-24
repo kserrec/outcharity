@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 
+import { syncCloudflareVisits } from './analytics.js';
 import { deliverEligibleCharityPortions } from './charity.js';
 import { getConfig } from './config.js';
 import {
   findAdvertiserByTokenHash,
   getContributionBySession,
   getLeaderboard,
+  getPublicStats,
   hideAdvertiserForPaymentIntent,
   isConfirmedLogo,
   isPublicLogo,
@@ -57,6 +59,7 @@ import {
   managePage,
   messagePage,
   privacyPage,
+  statsPage,
   submitPage,
   successPage,
   termsPage,
@@ -216,7 +219,7 @@ app.get('/', async (context) => {
   const config = configFor(context);
   const data = context.env.DB
     ? await getLeaderboard(context.env.DB)
-    : { advertisers: [], grossCents: 0, charityCents: 0 };
+    : { advertisers: [], recentPayments: [], grossCents: 0, charityCents: 0 };
   const response = await htmlResponse(
     context,
     homePage(config, data),
@@ -548,6 +551,19 @@ app.get('/logos/*', async (context) => {
 });
 
 app.get('/about', (context) => htmlResponse(context, aboutPage(configFor(context))));
+app.get('/stats', async (context) => {
+  const stats = context.env.DB
+    ? await getPublicStats(context.env.DB)
+    : {
+        totalPaidCents: 0,
+        charityCents: 0,
+        paymentCount: 0,
+        advertiserCount: 0,
+        averagePaymentCents: 0,
+        visitCount: null,
+      };
+  return htmlResponse(context, statsPage(configFor(context), stats));
+});
 app.get('/terms', (context) => htmlResponse(context, termsPage(configFor(context))));
 app.get('/privacy', (context) => htmlResponse(context, privacyPage(configFor(context))));
 
@@ -563,7 +579,7 @@ app.get('/health', (context) => {
 
 app.get('/sitemap.xml', (context) => {
   const config = configFor(context);
-  const urls = ['/', '/about', '/terms', '/privacy'].map(
+  const urls = ['/', '/stats', '/about', '/terms', '/privacy'].map(
     (path) => `<url><loc>${config.siteUrl}${path === '/' ? '' : path}</loc></url>`,
   );
   return context.body(
@@ -601,6 +617,14 @@ export { app };
 export default {
   fetch: app.fetch,
   scheduled(_event, env, context) {
-    context.waitUntil(deliverEligibleCharityPortions(env));
+    context.waitUntil(
+      Promise.all([
+        deliverEligibleCharityPortions(env),
+        syncCloudflareVisits(env).catch((error) => {
+          console.error('Cloudflare analytics sync failed.', { message: error.message });
+          return { synced: false, reason: 'failed' };
+        }),
+      ]),
+    );
   },
 };

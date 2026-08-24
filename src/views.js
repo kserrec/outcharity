@@ -37,6 +37,7 @@ function page(config, { title, description = SITE_DESCRIPTION, path = '/', body,
         <footer class="site-footer">
           <a href="/">Outcharity</a>
           <nav aria-label="Legal and project information">
+            <a href="/stats">Stats</a>
             <a href="/about">About</a>
             <a href="/terms">Terms</a>
             <a href="/privacy">Privacy</a>
@@ -58,6 +59,7 @@ function homeHeader() {
     <a class="wordmark" href="/" aria-label="Outcharity home">Outcharity</a>
     <nav aria-label="Primary navigation">
       <a href="#leaderboard-title">Leaderboard</a>
+      <a href="/stats">Stats</a>
       <a href="/about">About</a>
       <a href="/terms">Rules</a>
     </nav>
@@ -130,10 +132,36 @@ function listingCard(advertiser, index, config) {
   </article>`;
 }
 
+function recentPaymentItem(payment) {
+  return html`<li>
+    <a
+      class="recent-payment-link"
+      href="${payment.url}"
+      target="_blank"
+      rel="noopener sponsored"
+      aria-label="${`Visit ${payment.name}, recently active on Outcharity`}"
+    >
+      <img
+        class="recent-payment-logo"
+        src="${`/${payment.logo_key}`}"
+        alt=""
+        width="30"
+        height="30"
+        loading="lazy"
+      />
+      <span class="recent-payment-copy">
+        <strong>${payment.name}</strong>
+        <span>Recently confirmed</span>
+      </span>
+    </a>
+  </li>`;
+}
+
 export function homePage(config, data) {
   const board = data.advertisers.map((advertiser, index) => listingCard(advertiser, index, config));
   const leaders = board.slice(0, 3);
   const remainingListings = board.slice(3);
+  const recentPayments = (data.recentPayments || []).slice(0, 3);
   const heroCta = config.checkoutEnabled
     ? html`<a class="button button-primary" href="/submit">Get on the board</a>`
     : html`<span class="button button-disabled" aria-disabled="true">Opening after final checks</span>`;
@@ -159,6 +187,7 @@ export function homePage(config, data) {
               </p>`
             : ''}
           ${heroCta}
+          <a class="campaign-stats-link" href="/stats">See campaign stats</a>
         </div>
       </section>
 
@@ -170,6 +199,7 @@ export function homePage(config, data) {
           </div>
           <p>Ties go to the listing that reached its total first.</p>
         </div>
+        <p class="founder-seed-note">Founder seed - $100 donated to kick off the board</p>
         ${board.length > 0
           ? html`<div class="leader-stage">
                 <div class="leader-primary">${leaders[0]}</div>
@@ -191,10 +221,91 @@ export function homePage(config, data) {
               </div>
             </div>`}
         <div class="allocation-panel">${allocationStatement(config)}</div>
+        ${recentPayments.length > 0
+          ? html`<section class="recent-activity" aria-labelledby="recent-activity-title">
+              <div class="recent-activity-heading">
+                <h3 id="recent-activity-title">Recent activity</h3>
+                <p>Newest confirmed payments, ordered by recency—not amount.</p>
+              </div>
+              <ol class="recent-payment-list">
+                ${recentPayments.map((payment) => recentPaymentItem(payment))}
+              </ol>
+            </section>`
+          : ''}
       </section>
     </main>`;
 
   return page(config, { title: 'Outcharity', path: '/', body });
+}
+
+function formatCount(value) {
+  return Number(value || 0).toLocaleString('en-US');
+}
+
+function statCard(label, value, note) {
+  return html`<div class="stat-card">
+    <dt>${label}</dt>
+    <dd class="stat-value">${value}</dd>
+    <dd class="stat-note">${note}</dd>
+  </div>`;
+}
+
+export function statsPage(config, stats) {
+  const cards = [
+    statCard(
+      'Total paid',
+      formatMoney(stats.totalPaidCents),
+      'The sum of confirmed payments currently counted.',
+    ),
+    statCard(
+      'To charity',
+      formatMoney(stats.charityCents),
+      `The recorded ${config.charityPercentage}% allocation. Fractional cents round in the charity's favor.`,
+    ),
+    statCard(
+      'Payments',
+      formatCount(stats.paymentCount),
+      'Confirmed transactions currently counted. Repeat payments count separately.',
+    ),
+    statCard(
+      'Advertisers on the board',
+      formatCount(stats.advertiserCount),
+      'Visible listings with a positive confirmed total.',
+    ),
+    statCard(
+      'Average payment',
+      formatMoney(stats.averagePaymentCents),
+      'Total paid divided by counted payments, rounded to the nearest cent.',
+    ),
+  ];
+  if (stats.visitCount !== null && stats.visitCount !== undefined) {
+    cards.push(
+      statCard(
+        'Website visits',
+        formatCount(stats.visitCount),
+        'Entries from a direct link or another site—not unique people. Cloudflare excludes bots; European visits are not collected.',
+      ),
+    );
+  }
+  const body = html`${brandHeader()}
+    <main class="shell page-main stats-page">
+      <p class="eyebrow">Campaign stats</p>
+      <h1>How the giving adds up.</h1>
+      <p class="page-intro">
+        A current aggregate view of confirmed payments and recorded website visits. Refunded or
+        disputed payments are excluded, and individual transactions or visits are not published.
+      </p>
+      <dl class="stats-grid">${cards}</dl>
+      <a class="text-link stats-back-link" href="/">Back to the leaderboard</a>
+    </main>`;
+
+  return page(config, {
+    title: 'Campaign stats',
+    description:
+      'Public aggregate payment, charity-allocation, and website-visit statistics for Outcharity.',
+    path: '/stats',
+    body,
+  });
 }
 
 function fieldError(errors, name) {

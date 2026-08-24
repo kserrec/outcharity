@@ -5,6 +5,7 @@ import {
   findAdvertiserByTokenHash,
   getContributionBySession,
   getLeaderboard,
+  getPublicStats,
   isPublicLogo,
   listUndeliveredContributions,
   recordConfirmedContribution,
@@ -65,6 +66,7 @@ test('leaderboard listings and totals come from one database snapshot', async ()
                 logo_key: 'logos/11111111-1111-4111-8111-111111111111.png',
                 total_contributed_cents: 1_000,
                 created_at: '2026-01-01T00:00:00.000Z',
+                recent_position: 1,
                 gross_cents: 1_000,
                 charity_cents: 900,
               },
@@ -79,8 +81,171 @@ test('leaderboard listings and totals come from one database snapshot', async ()
   assert.equal(prepareCalls, 1);
   assert.equal(board.advertisers.length, 1);
   assert.equal(board.advertisers[0].total_contributed_cents, board.grossCents);
+  assert.deepEqual(board.recentPayments, [
+    {
+      id: 'snapshot-advertiser',
+      name: 'Snapshot',
+      url: 'https://snapshot.example/',
+      logo_key: 'logos/11111111-1111-4111-8111-111111111111.png',
+    },
+  ]);
   assert.equal(board.charityCents, 900);
   assert.equal('gross_cents' in board.advertisers[0], false);
+  assert.equal('recent_position' in board.advertisers[0], false);
+});
+
+test('public totals use only eligible payments from advertisers currently on the board', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  const alphaId = '13131313-1313-4313-8313-131313131313';
+  const bravoId = '14141414-1414-4414-8414-141414141414';
+
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: alphaId,
+      sessionId: 'cs_stats_alpha_first',
+      paymentIntentId: 'pi_stats_alpha_first',
+      amount: 101,
+      advertiser: advertiser(alphaId, 'Alpha Stats'),
+    }),
+  );
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: alphaId,
+      sessionId: 'cs_stats_alpha_second',
+      paymentIntentId: 'pi_stats_alpha_second',
+      amount: 102,
+    }),
+  );
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: alphaId,
+      sessionId: 'cs_stats_alpha_third',
+      paymentIntentId: 'pi_stats_alpha_third',
+      amount: 103,
+    }),
+  );
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: bravoId,
+      sessionId: 'cs_stats_bravo',
+      paymentIntentId: 'pi_stats_bravo',
+      amount: 200,
+      advertiser: advertiser(bravoId, 'Bravo Stats'),
+    }),
+  );
+
+  await db.prepare('UPDATE advertisers SET is_hidden = 1 WHERE id = ?').bind(bravoId).run();
+  await db
+    .prepare(
+      "INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES (?, 'test')",
+    )
+    .bind('pi_stats_alpha_second')
+    .run();
+
+  const board = await getLeaderboard(db);
+  assert.deepEqual(board.advertisers.map((entry) => entry.name), ['Alpha Stats']);
+  assert.equal(board.grossCents, 204);
+  assert.equal(board.charityCents, 184);
+  assert.deepEqual(await getPublicStats(db), {
+    totalPaidCents: 204,
+    charityCents: 184,
+    paymentCount: 2,
+    advertiserCount: 1,
+    averagePaymentCents: 102,
+    visitCount: null,
+  });
+});
+
+test('public stats have an exact zero state', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+
+  assert.deepEqual(await getPublicStats(db), {
+    totalPaidCents: 0,
+    charityCents: 0,
+    paymentCount: 0,
+    advertiserCount: 0,
+    averagePaymentCents: 0,
+    visitCount: null,
+  });
+});
+
+test('recent payments favor recency over amount without duplicates or hidden and suspended activity', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  const alphaId = '15151515-1515-4515-8515-151515151515';
+  const bravoId = '16161616-1616-4616-8616-161616161616';
+  const charlieId = '17171717-1717-4717-8717-171717171717';
+  const deltaId = '18181818-1818-4818-8818-181818181818';
+
+  for (const [id, name, amount, key] of [
+    [alphaId, 'Alpha', 10_000, 'alpha-old'],
+    [bravoId, 'Bravo', 100, 'bravo'],
+    [charlieId, 'Charlie', 500, 'charlie'],
+    [deltaId, 'Delta', 200, 'delta'],
+  ]) {
+    await recordConfirmedContribution(
+      db,
+      record({
+        advertiserId: id,
+        sessionId: `cs_recent_${key}`,
+        paymentIntentId: `pi_recent_${key}`,
+        amount,
+        advertiser: advertiser(id, name),
+      }),
+    );
+  }
+
+  let board = await getLeaderboard(db);
+  assert.deepEqual(board.recentPayments.map((payment) => payment.name), [
+    'Delta',
+    'Charlie',
+    'Bravo',
+  ]);
+  assert.equal(board.recentPayments.some((payment) => payment.name === 'Alpha'), false);
+
+  await recordConfirmedContribution(
+    db,
+    record({
+      advertiserId: alphaId,
+      sessionId: 'cs_recent_alpha-new',
+      paymentIntentId: 'pi_recent_alpha-new',
+      amount: 100,
+    }),
+  );
+  board = await getLeaderboard(db);
+  assert.deepEqual(board.recentPayments.map((payment) => payment.name), [
+    'Alpha',
+    'Delta',
+    'Charlie',
+  ]);
+  assert.equal(board.recentPayments.filter((payment) => payment.name === 'Alpha').length, 1);
+
+  await db.prepare('UPDATE advertisers SET is_hidden = 1 WHERE id = ?').bind(deltaId).run();
+  board = await getLeaderboard(db);
+  assert.deepEqual(board.recentPayments.map((payment) => payment.name), [
+    'Alpha',
+    'Charlie',
+    'Bravo',
+  ]);
+
+  await db
+    .prepare(
+      "INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES (?, 'test')",
+    )
+    .bind('pi_recent_alpha-new')
+    .run();
+  board = await getLeaderboard(db);
+  assert.deepEqual(board.recentPayments.map((payment) => payment.name), [
+    'Charlie',
+    'Bravo',
+    'Alpha',
+  ]);
 });
 
 test('distinct advertiser IDs with the same prefix cannot collide on slug', async (context) => {
@@ -217,8 +382,8 @@ test('ranking uses total descending, earlier total reach for ties, and hides fla
     board.advertisers.map((entry) => entry.name),
     ['Alpha', 'Bravo'],
   );
-  assert.equal(board.grossCents, 8_000);
-  assert.equal(board.charityCents, 7_200);
+  assert.equal(board.grossCents, 4_000);
+  assert.equal(board.charityCents, 3_600);
   assert.equal(await isPublicLogo(db, `logos/${charlieId}.png`), false);
   assert.equal(await isPublicLogo(db, `logos/${alphaId}.png`), true);
 });

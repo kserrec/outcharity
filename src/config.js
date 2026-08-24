@@ -93,7 +93,7 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
   );
   const minimumCents = readInteger(
     env.MIN_CONTRIBUTION_CENTS,
-    1_000,
+    100,
     'MIN_CONTRIBUTION_CENTS',
     issues,
   );
@@ -141,7 +141,7 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
   const charityEin = String(env.CHARITY_EIN || '').trim();
   const charityDisclosure = String(env.CHARITY_DISCLOSURE || '').trim();
   const campaignHeadline = String(
-    env.CAMPAIGN_HEADLINE || 'Buy the top spot. Help the featured charity.',
+    env.CAMPAIGN_HEADLINE || 'Buy Clout. Do good.',
   ).trim();
 
   const campaignIssues = [];

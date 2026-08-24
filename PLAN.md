@@ -374,3 +374,88 @@ the launch switch still prevents Checkout creation.
 
 Exit: Outcharity is accepting genuine purchases, the first transaction is reconciled end to end,
 and the rollback remains tested and immediate.
+
+## Phase 8 — Public campaign stats
+
+- [x] Add one D1 snapshot query for total paid, actual charity allocation, counted payments,
+  visible advertisers on the board, and the average counted payment. Count only eligible payments
+  belonging to advertisers currently visible on the board; add no migration.
+  - `getPublicStats` derives all five values in one prepared D1 statement. Payment totals use the
+    leaderboard's shared visibility and suspension exclusions; the visible-advertiser count remains
+    intentionally distinct from the transaction count; the average rounds to the nearest cent and
+    the empty state is exactly zero
+- [x] Add a server-rendered public `/stats` page that defines each number plainly and exposes no
+  individual transaction, payment identifier, visitor analytics, or historical chart.
+  - The page states the refund/dispute rule, repeat-payment semantics, charity-favoring cent
+    allocation, and average calculation beside the numbers. It reads only existing D1 records and
+    introduces no browser-side analytics or package
+- [x] Link the page from the homepage primary navigation, campaign-status area, and footer, include
+  it in the public sitemap, and keep the five-stat layout readable as one full-width column on small
+  screens.
+  - The homepage primary navigation and campaign panel link to the page, every public footer includes
+    Stats, `/stats` is canonical and shareable through the sitemap, and the 760 px breakpoint forces
+    one card per row
+- [x] Prove the aggregate semantics, zero state, rounding, route response, page copy, navigation,
+  sitemap, and responsive CSS with focused tests, then run the full test, syntax, dry-build, and
+  diff checks.
+  - Focused database and page/route checks pass. All 78 tests, `npm run check`, the dotenv-isolated
+    116.81 KiB compressed dry build, and `git diff --check` pass. No package, migration, new data
+    store, or tracking surface was added
+  - Wrangler verified that production D1 had no pending migration, then deployed Worker version
+    `b894efa3-74d0-4eb3-b9d5-0685c8ab6516` to the `outcharity.com` custom domain. Exact 320 px Chrome
+    device emulation proves all four primary links fit on one line without overflow; clicking Stats
+    reaches the five-card page at the same width. Version `03b50de1-aa29-4649-8f81-c0f48fa14a15`
+    was its immediate rollback target
+- [x] Correct both homepage and `/stats` money aggregates so a hidden founder contribution cannot
+  affect public numbers; public totals now mean exactly the eligible payments represented by current
+  board advertisers.
+  - The verified cause was an aggregate over all eligible contribution rows without a join to the
+    visible advertiser set. The shared query now applies both rules, and regression coverage proves
+    hidden advertisers, suspended payments, repeat visible payments, charity rounding, and the
+    visible-board count together
+  - All 78 tests, syntax checking, the dotenv-isolated 116.83 KiB compressed dry build, and
+    `git diff --check` pass. No package, migration, data mutation, data store, or tracking surface was
+    added
+  - A read-only production query returned 700 cents paid, 630 cents allocated to charity, four
+    payments, and four visible advertisers. Worker version
+    `bfe635ff-3605-4e8f-a47e-5ef8f3a00ee2` is deployed; live homepage and `/stats` probes show `$7`,
+    `$6.30`, `4` payments, `4` advertisers, and a `$1.75` average. Version
+    `b894efa3-74d0-4eb3-b9d5-0685c8ab6516` is the immediate rollback target
+
+Exit: Visitors can open one shareable stats page whose five numbers match the leaderboard's public
+money rules, with no new dependency, data store, or tracking surface.
+
+## Phase 9 — Public website visits
+
+- [x] Define the public number as Cloudflare Web Analytics visits rather than viewers or page views:
+  an entry from a direct link or another site, with bots excluded and European traffic absent under
+  the already-approved non-EU collection rule. Preserve the verified launch floor of 368 without
+  presenting it as a unique-person count.
+- [x] Add daily aggregate storage and an hourly-guarded Cloudflare GraphQL sync to the existing
+  15-minute scheduled event. Keep only the day, count, and fetch time; store no individual visit,
+  IP address, browser detail, or tracking identifier. Isolate analytics failures from charity
+  delivery and retain the last successful total.
+- [x] Extend the existing one-statement D1 stats snapshot and server-rendered `/stats` page with a
+  sixth Website visits card after the first successful sync. Add no runtime package, browser script,
+  cookie, fingerprint, or new analytics collection mechanism.
+- [x] Apply migration `0004_web_analytics.sql`, deploy the Worker, verify the first live GraphQL sync
+  against the Cloudflare dashboard baseline, and prove the public card and existing payment stats in
+  production.
+- [x] Run the full test, syntax, dotenv-isolated dry-build, migration, secret-name, and diff checks;
+  record the deployed version and immediate rollback target.
+  - Production D1 applied only migration `0004_web_analytics.sql`; both new aggregate tables were
+    empty before deployment and no migration remains pending. The first scheduled GraphQL query at
+    `2026-08-24T04:30:48.628Z` stored four daily totals summing to 369, which is above and therefore
+    consistent with the 368-visit dashboard screenshot taken earlier that evening
+  - Live `/stats` shows 369 Website visits while preserving `$7` paid, `$6.30` to charity, four
+    payments, four advertisers, and a `$1.75` average. `/health` remains healthy with checkout
+    enabled, and the encrypted secret-name inventory includes `CLOUDFLARE_ANALYTICS_TOKEN` without
+    exposing its value
+  - All 83 tests, `npm run check`, the dotenv-isolated 119.03 KiB compressed dry build, and
+    `git diff --check` pass. Worker version `bcd1a77d-8d52-4843-ba85-70aaebdf5f31` receives 100% of
+    production traffic; version `f2dd830d-1dcf-4e5c-a666-b055e526bbd7` is the immediate rollback
+    target. No asset changed during deployment
+
+Exit: `/stats` publishes an automatically refreshed, bot-filtered aggregate website-visit total
+without claiming unique viewers or retaining visitor-level data, while all existing money and
+charity-delivery behavior remains intact.

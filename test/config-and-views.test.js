@@ -5,7 +5,7 @@ import test from 'node:test';
 import { getConfig } from '../src/config.js';
 import { hashToken } from '../src/domain.js';
 import { app } from '../src/index.js';
-import { homePage, termsPage } from '../src/views.js';
+import { homePage, statsPage, submitPage, termsPage } from '../src/views.js';
 import {
   configuredEnvironment as completeEnvironment,
   executionContext,
@@ -18,20 +18,37 @@ test('production configuration pins the approved live campaign', () => {
   );
 
   assert.equal(deployment.vars.OUTCHARITY_LAUNCH_APPROVED, 'true');
+  assert.equal(deployment.vars.CLOUDFLARE_ACCOUNT_ID, '82901762bf678507dc432f37e1bcb440');
+  assert.equal(deployment.vars.WEB_ANALYTICS_START_DATE, '2026-08-21');
+  assert.equal(deployment.vars.WEB_ANALYTICS_BASELINE_VISITS, '368');
   assert.equal(deployment.vars.CHARITY_NAME, 'St Jude Childrens Research Hospital');
   assert.equal(deployment.vars.CHARITY_URL, 'https://www.stjude.org');
   assert.equal(deployment.vars.CHARITY_EIN, '620646012');
   assert.equal(
     deployment.vars.CAMPAIGN_HEADLINE,
-    'Buy the top spot. Help the featured charity.',
+    'Buy Clout. Do good.',
   );
-  assert.equal(deployment.vars.MIN_CONTRIBUTION_CENTS, '1000');
+  assert.equal(deployment.vars.MIN_CONTRIBUTION_CENTS, '100');
   assert.equal(deployment.vars.MAX_CONTRIBUTION_CENTS, '10000000');
   assert.equal(deployment.vars.CHARITY_HOLD_DAYS, '30');
   assert.equal(
     deployment.vars.CHARITY_DISCLOSURE,
     'Outcharity is not affiliated with or endorsed by St. Jude Children’s Research Hospital. Each payment purchases advertising and is not represented as a tax-deductible charitable gift by the advertiser. Of each gross payment, 90% is directed to St Jude Childrens Research Hospital through GoodAPI and 10% supports Outcharity. Outcharity separately absorbs payment-processing fees; those fees do not reduce the 90% charity allocation.',
   );
+});
+
+test('the default contribution starts at the one-dollar minimum', () => {
+  const environment = completeEnvironment();
+  delete environment.MIN_CONTRIBUTION_CENTS;
+  delete environment.CAMPAIGN_HEADLINE;
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(submitPage(config));
+
+  assert.equal(config.minimumCents, 100);
+  assert.equal(config.campaignHeadline, 'Buy Clout. Do good.');
+  assert.match(document, /data-amount="1"/);
+  assert.match(document, /name="amount"\s+value="1"/);
+  assert.match(document, /Minimum \$1\./);
 });
 
 test('terms publish the approved refund and dispute promises', () => {
@@ -532,6 +549,68 @@ test('homepage elevates the top three and makes every listing a full-card websit
   }
 });
 
+test('recent activity is recency-only, capped at three, compact, and below the leaderboard', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const recentPayments = [
+    ['Newest Company', 'https://newest.example/', 'newest'],
+    ['Second Newest', 'https://second-newest.example/', 'second'],
+    ['Third Newest', 'https://third-newest.example/', 'third'],
+    ['Must Stay Hidden', 'https://fourth-newest.example/', 'fourth'],
+  ].map(([name, url, key], index) => ({
+    id: `${index + 5}1111111-1111-4111-8111-111111111111`,
+    name,
+    url,
+    logo_key: `logos/${key}.png`,
+  }));
+  const document = String(
+    homePage(config, {
+      grossCents: 100_000,
+      charityCents: 90_000,
+      advertisers: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'Leaderboard Leader',
+          description: 'The large primary listing.',
+          url: 'https://leader.example/',
+          logo_key: 'logos/leader.png',
+          total_contributed_cents: 100_000,
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      recentPayments,
+    }),
+  );
+  const allocationIndex = document.indexOf('class="allocation-panel"');
+  const recentIndex = document.indexOf('class="recent-activity"');
+  const footerIndex = document.indexOf('class="site-footer"');
+  const activity = document.slice(recentIndex, footerIndex);
+
+  assert.ok(allocationIndex >= 0 && allocationIndex < recentIndex);
+  assert.equal(activity.match(/class="recent-payment-link"/g)?.length, 3);
+  assert.ok(activity.indexOf('Newest Company') < activity.indexOf('Second Newest'));
+  assert.ok(activity.indexOf('Second Newest') < activity.indexOf('Third Newest'));
+  assert.doesNotMatch(activity, /Must Stay Hidden/);
+  assert.doesNotMatch(activity, /class="listing-card/);
+  assert.doesNotMatch(activity, /\$\d/);
+  assert.match(activity, /ordered by recency—not amount/);
+  assert.match(activity, /rel="noopener sponsored"/);
+
+  const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobileStart = styles.indexOf('@media (max-width: 760px)');
+  const desktopStyles = styles.slice(0, mobileStart);
+  const mobileStyles = styles.slice(mobileStart, styles.indexOf('@media (max-width: 350px)'));
+  const desktopList = desktopStyles.match(/\.recent-payment-list\s*\{([^}]*)\}/)?.[1] || '';
+  const desktopLink = desktopStyles.match(/\.recent-payment-link\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileLink = mobileStyles.match(/\.recent-payment-link\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileLogo = mobileStyles.match(/\.recent-payment-logo\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.match(desktopList, /grid-template-columns:\s*repeat\(3,/);
+  assert.match(desktopLink, /height:\s*50px/);
+  assert.match(mobileLink, /height:\s*54px/);
+  assert.match(mobileLogo, /display:\s*none/);
+});
+
 test('mobile homepage leaves only the CTA visible in the unframed campaign status', () => {
   const environment = completeEnvironment();
   const config = getConfig(environment, environment.SITE_URL);
@@ -553,14 +632,178 @@ test('mobile homepage leaves only the CTA visible in the unframed campaign statu
 
   assert.match(document, /The remaining 10% keeps Outcharity running\./);
   assert.doesNotMatch(document, /The remaining 10% supports Outcharity\./);
-  assert.match(desktopStatus, /border:\s*2px solid var\(--ink\)/);
+  assert.match(desktopStatus, /border:\s*1px solid var\(--ink\)/);
+  assert.match(desktopStatus, /border-radius:\s*14px/);
   assert.match(desktopStatus, /background:\s*var\(--card\)/);
-  assert.match(desktopStatus, /box-shadow:\s*6px 6px 0 var\(--sun\)/);
+  assert.match(desktopStatus, /box-shadow:\s*4px 4px 0 var\(--sun\)/);
   assert.match(mobileStatus, /padding:\s*0/);
   assert.match(mobileStatus, /border:\s*0/);
   assert.match(mobileStatus, /background:\s*transparent/);
   assert.match(mobileStatus, /box-shadow:\s*none/);
   assert.match(mobileTotals, /display:\s*none/);
+});
+
+test('the stats page defines six public aggregates and stacks each card on mobile', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(
+    statsPage(config, {
+      totalPaidCents: 12_345,
+      charityCents: 11_111,
+      paymentCount: 4,
+      advertiserCount: 3,
+      averagePaymentCents: 3_086,
+      visitCount: 368,
+    }),
+  );
+  const homepage = String(
+    homePage(config, { grossCents: 12_345, charityCents: 11_111, advertisers: [] }),
+  );
+  const primaryNavigation =
+    homepage.match(/<nav aria-label="Primary navigation">([\s\S]*?)<\/nav>/)?.[1] || '';
+  const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobileStart = styles.indexOf('@media (max-width: 760px)');
+  const mobileEnd = styles.indexOf('@media (max-width: 350px)');
+  const desktopGrid = styles.slice(0, mobileStart).match(/\.stats-grid\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileGrid = styles
+    .slice(mobileStart, mobileEnd)
+    .match(/\.stats-grid\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.match(document, /<link rel="canonical" href="https:\/\/outcharity\.com\/stats"/);
+  assert.equal(document.match(/class="stat-card"/g)?.length, 6);
+  for (const [label, value] of [
+    ['Total paid', '$123.45'],
+    ['To charity', '$111.11'],
+    ['Payments', '4'],
+    ['Advertisers on the board', '3'],
+    ['Average payment', '$30.86'],
+    ['Website visits', '368'],
+  ]) {
+    assert.match(document, new RegExp(`${label}[\\s\\S]*?${value.replace('$', '\\$')}`), label);
+  }
+  assert.match(document, /Refunded or\s+disputed payments are excluded/);
+  assert.match(document, /individual transactions or visits are not published/);
+  assert.match(document, /Repeat payments count separately/);
+  assert.match(document, /Fractional cents round in the charity&#39;s favor/);
+  assert.match(document, /rounded to the nearest cent/);
+  assert.match(document, /not unique people/);
+  assert.match(document, /Cloudflare excludes bots; European visits are not collected/);
+  assert.match(homepage, /class="campaign-stats-link" href="\/stats">See campaign stats/);
+  assert.match(homepage, /<a href="\/stats">Stats<\/a>/);
+  assert.equal(primaryNavigation.match(/<a /g)?.length, 4);
+  assert.match(primaryNavigation, /href="\/stats">Stats<\/a>/);
+  assert.match(desktopGrid, /repeat\(auto-fit,\s*minmax\(190px,\s*1fr\)\)/);
+  assert.match(mobileGrid, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+
+  const beforeFirstSync = String(
+    statsPage(config, {
+      totalPaidCents: 12_345,
+      charityCents: 11_111,
+      paymentCount: 4,
+      advertiserCount: 3,
+      averagePaymentCents: 3_086,
+      visitCount: null,
+    }),
+  );
+  assert.equal(beforeFirstSync.match(/class="stat-card"/g)?.length, 5);
+  assert.doesNotMatch(beforeFirstSync, /Website visits/);
+});
+
+test('the stats route reads one D1 aggregate and is listed in the public sitemap', async () => {
+  let prepareCalls = 0;
+  const environment = completeEnvironment({
+    DB: {
+      prepare() {
+        prepareCalls += 1;
+        return {
+          async first() {
+            return {
+              total_paid_cents: 1_234,
+              charity_cents: 1_111,
+              payment_count: 2,
+              advertiser_count: 1,
+              visit_count: 368,
+              visit_count_updated_at: '2026-08-24T04:00:00.000Z',
+            };
+          },
+        };
+      },
+    },
+  });
+  const response = await app.fetch(
+    new Request('https://outcharity.com/stats'),
+    environment,
+    executionContext,
+  );
+  const document = await response.text();
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('Cache-Control'), 'no-store');
+  assert.equal(prepareCalls, 1);
+  assert.match(document, /Total paid[\s\S]*?\$12\.34/);
+  assert.match(document, /To charity[\s\S]*?\$11\.11/);
+  assert.match(document, /Average payment[\s\S]*?\$6\.17/);
+  assert.match(document, /Website visits[\s\S]*?368/);
+
+  const sitemapResponse = await app.fetch(
+    new Request('https://outcharity.com/sitemap.xml'),
+    environment,
+    executionContext,
+  );
+  assert.equal(sitemapResponse.status, 200);
+  assert.match(await sitemapResponse.text(), /<loc>https:\/\/outcharity\.com\/stats<\/loc>/);
+  assert.equal(prepareCalls, 1, 'the sitemap must not query D1');
+});
+
+test('the visual refresh preserves the palette and compacts mobile leaderboard entries', () => {
+  const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobileStart = styles.indexOf('@media (max-width: 760px)');
+  const mobileEnd = styles.indexOf('@media (max-width: 350px)');
+  const root = styles.match(/:root\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileStyles = styles.slice(mobileStart, mobileEnd);
+  const listingCard = mobileStyles.match(/\.listing-card\s*\{([^}]*)\}/)?.[1] || '';
+  const firstCard = mobileStyles.match(/\.listing-card-first\s*\{([^}]*)\}/)?.[1] || '';
+  const logo = mobileStyles.match(/\.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
+  const firstLogo =
+    mobileStyles.match(/\.listing-card-first \.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
+  const description = mobileStyles.match(/\.listing-copy p\s*\{([^}]*)\}/)?.[1] || '';
+  const outbidLink = mobileStyles.match(/\.outbid-link\s*\{([^}]*)\}/)?.[1] || '';
+  const runnerLogo =
+    mobileStyles.match(/\.leader-runners \.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
+
+  for (const token of [
+    '--ink: #11110f',
+    '--paper: #f6f4ed',
+    '--card: #fffef9',
+    '--signal: #ff5c35',
+    '--signal-dark: #cf3210',
+    '--sun: #ffd84d',
+    '--warm: #fff0e9',
+    '--muted: #68665f',
+    '--line: #c9c5b9',
+    '--success: #166534',
+    '--error: #a51d14',
+  ]) {
+    assert.match(root, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  assert.match(listingCard, /grid-template-columns:\s*32px 44px/);
+  assert.match(listingCard, /gap:\s*4px 7px/);
+  assert.match(listingCard, /padding:\s*8px/);
+  assert.match(firstCard, /grid-template-columns:\s*35px 50px/);
+  assert.match(firstCard, /padding:\s*9px/);
+  assert.match(logo, /width:\s*44px/);
+  assert.match(logo, /height:\s*44px/);
+  assert.match(firstLogo, /width:\s*50px/);
+  assert.match(firstLogo, /height:\s*50px/);
+  assert.match(description, /-webkit-line-clamp:\s*1/);
+  assert.match(outbidLink, /min-height:\s*30px/);
+  assert.match(
+    mobileStyles,
+    /\.leader-runners\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
+  );
+  assert.match(runnerLogo, /width:\s*36px/);
+  assert.match(runnerLogo, /height:\s*36px/);
 });
 
 test('locked empty homepage makes the open top spot prominent without implying checkout is open', () => {
@@ -574,6 +817,7 @@ test('locked empty homepage makes the open top spot prominent without implying c
   assert.match(document, /class="empty-rank"[^>]*>#1</);
   assert.match(document, /The first confirmed listing owns the top spot/);
   assert.match(document, /No filler listings\. No made-up activity\./);
+  assert.match(document, /Founder seed - \$100 donated to kick off the board/);
   assert.match(document, /Opening after final checks/);
   assert.match(document, /Checkout stays closed until every launch check\s+passes/);
   assert.doesNotMatch(document, /href="\/submit"/);
@@ -720,7 +964,7 @@ test('one invalid submission reports every invalid field together', async () => 
   form.set('name', '');
   form.set('url', 'not a url');
   form.set('description', 'ok');
-  form.set('amount', '1');
+  form.set('amount', '0.99');
   form.set('logo', new File([new TextEncoder().encode('not an image')], 'x.png', { type: 'image/png' }));
   const response = await app.fetch(
     new Request('https://outcharity.com/checkout', {

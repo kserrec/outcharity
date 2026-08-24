@@ -5,13 +5,24 @@ Outcharity is a public advertising leaderboard where rank is determined by confi
 ## Runtime
 
 - One Hono application on Cloudflare Workers
-- D1 for advertisers and immutable contribution amounts
+- D1 for advertisers, immutable contribution amounts, and daily aggregate visit totals
 - R2 for validated PNG, JPEG, and WebP logos
 - Cloudflare Cache API for five-second leaderboard caching
 - Stripe Checkout and signed webhooks
 - GoodAPI charity donations with provider-side idempotency
 
-The browser receives ordinary HTML and CSS. JavaScript is limited to amount shortcuts and copy/share controls.
+The browser receives ordinary HTML and CSS. Application-owned JavaScript is limited to amount
+shortcuts and copy/share controls; Cloudflare automatically injects its existing Web Analytics
+measurement script for non-European visits.
+
+The public `/stats` page reads one current D1 aggregate for total paid, recorded charity allocation,
+counted payments, visible advertisers, average payment, and Cloudflare-recorded website visits.
+Money and payment counts include only eligible contributions from advertisers currently visible on
+the board, so hidden listings and refunded or disputed payments do not affect any public total. A
+visit is an entry from a direct link or another website, not a unique person or every page view.
+Cloudflare excludes bots, and the configured automatic injection does not collect European visits.
+Outcharity stores only daily aggregate totals—never an individual visit, IP address, browser detail,
+or tracking identifier.
 
 The live production Worker bundle is 109.41 KiB compressed at the launch deployment. There are
 two runtime packages: Hono supplies hardened routing and HTML escaping with no transitive packages,
@@ -42,10 +53,14 @@ Application secrets belong in Cloudflare's encrypted Wrangler secret storage. No
 
 `wrangler.jsonc` identifies the production `outcharity` D1 database and the private
 `outcharity-logos` R2 bucket. It contains only non-secret campaign configuration; provider
-credentials remain encrypted Cloudflare Worker secrets.
+credentials remain encrypted Cloudflare Worker secrets. The separate Cloudflare analytics token
+has read-only Account Analytics permission and is likewise stored only as a Worker secret.
 
 Cloudflare Workers Logs supplies error monitoring. Cloudflare Web Analytics is enabled through
 automatic injection for non-EU visitors, without adding an analytics package to the application.
+The existing 15-minute scheduled event refreshes the stored daily aggregates at most about once an
+hour; analytics failures are logged without interrupting charity delivery or replacing the last
+successful count.
 
 Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs
 are disabled. GitHub dependency alerts, automatic security updates, native secret scanning, and

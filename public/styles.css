@@ -11,7 +11,7 @@
   --line: #c9c5b9;
   --success: #166534;
   --error: #a51d14;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
 }
 
@@ -70,18 +70,18 @@ a {
   display: inline-block;
   font-size: 1.5rem;
   font-weight: 900;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.045em;
   line-height: 1;
   text-decoration: none;
 }
 
 .home-header {
   display: flex;
-  min-height: 74px;
+  min-height: 70px;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
 }
 
 .home-header nav {
@@ -89,7 +89,7 @@ a {
   gap: clamp(16px, 3vw, 34px);
   align-items: center;
   font-size: 0.87rem;
-  font-weight: 800;
+  font-weight: 750;
 }
 
 .home-header nav a {
@@ -100,7 +100,7 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(270px, 340px);
   gap: clamp(28px, 6vw, 86px);
-  align-items: end;
+  align-items: center;
   padding-block: clamp(28px, 5vw, 62px) clamp(30px, 4vw, 52px);
 }
 
@@ -117,24 +117,25 @@ a {
 .campaign-copy h1 {
   max-width: 790px;
   margin: 0;
-  font-size: clamp(3.3rem, 7.5vw, 7rem);
+  font-size: clamp(3.3rem, 7vw, 6.65rem);
   font-weight: 900;
-  letter-spacing: -0.08em;
-  line-height: 0.86;
+  letter-spacing: -0.065em;
+  line-height: 0.9;
 }
 
 .campaign-deck {
   margin: 18px 0 0;
   color: var(--muted);
   font-size: clamp(1rem, 1.7vw, 1.22rem);
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .campaign-status {
-  padding: 22px;
-  border: 2px solid var(--ink);
+  padding: 20px;
+  border: 1px solid var(--ink);
+  border-radius: 14px;
   background: var(--card);
-  box-shadow: 6px 6px 0 var(--sun);
+  box-shadow: 4px 4px 0 var(--sun);
 }
 
 .campaign-total {
@@ -172,6 +173,15 @@ a {
   margin-top: 22px;
 }
 
+.campaign-stats-link {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+}
+
 .allocation {
   max-width: 690px;
   margin: 24px 0 32px;
@@ -200,12 +210,12 @@ a {
   justify-content: center;
   padding: 13px 20px;
   border: 2px solid var(--ink);
-  border-radius: 0;
+  border-radius: 8px;
   font-weight: 900;
   line-height: 1.1;
   text-align: center;
   text-decoration: none;
-  box-shadow: 5px 5px 0 var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
   cursor: pointer;
 }
 
@@ -247,7 +257,7 @@ a {
   justify-content: space-between;
   gap: 24px;
   padding: 20px 2px 16px;
-  border-bottom: 4px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
 }
 
 .board-heading > div {
@@ -273,6 +283,13 @@ a {
   text-align: right;
 }
 
+.founder-seed-note {
+  margin: 14px 2px 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .leader-stage,
 .leader-runners {
   display: grid;
@@ -284,44 +301,44 @@ a {
 }
 
 .listing-stack-rest {
-  margin-top: 32px;
-  border-block: 2px solid var(--ink);
+  margin-top: 28px;
+  border-block: 1px solid var(--ink);
 }
 
 .listing-card {
   position: relative;
   display: grid;
-  grid-template-columns: 76px 82px minmax(200px, 1fr) minmax(165px, auto);
+  grid-template-columns: 70px 74px minmax(200px, 1fr) minmax(165px, auto);
   grid-template-rows: auto auto;
-  gap: 10px 20px;
+  gap: 8px 18px;
   align-items: center;
-  min-height: 148px;
-  padding: 22px 24px;
-  border: 2px solid var(--line);
-  border-radius: 18px;
+  min-height: 136px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
   background: var(--card);
-  box-shadow: 4px 4px 0 #ded9cb;
+  box-shadow: 2px 3px 0 #ded9cb;
   cursor: pointer;
   transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .listing-card-first {
-  grid-template-columns: 92px 108px minmax(200px, 1fr) minmax(185px, auto);
-  min-height: 205px;
-  border: 3px solid var(--ink);
+  grid-template-columns: 84px 96px minmax(200px, 1fr) minmax(185px, auto);
+  min-height: 185px;
+  border: 2px solid var(--ink);
   background: linear-gradient(120deg, #fff8cc 0%, var(--warm) 100%);
-  box-shadow: 8px 8px 0 var(--signal);
+  box-shadow: 5px 5px 0 var(--signal);
 }
 
 .listing-card:hover {
   background: #fff;
-  box-shadow: 6px 6px 0 #cbc5b6;
-  transform: translate(-2px, -2px);
+  box-shadow: 3px 4px 0 #cbc5b6;
+  transform: translate(-1px, -1px);
 }
 
 .listing-card-first:hover {
   background: linear-gradient(120deg, #fff2a5 0%, #ffe1d5 100%);
-  box-shadow: 10px 10px 0 var(--signal);
+  box-shadow: 7px 7px 0 var(--signal);
 }
 
 .listing-card:focus-within {
@@ -368,16 +385,17 @@ a {
 
 .listing-logo {
   grid-row: 1 / 3;
-  width: 80px;
-  height: 80px;
-  border: 2px solid var(--ink);
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
   background: #fff;
   object-fit: contain;
 }
 
 .listing-card-first .listing-logo {
-  width: 104px;
-  height: 104px;
+  width: 92px;
+  height: 92px;
 }
 
 .listing-copy {
@@ -474,13 +492,13 @@ a {
   grid-template-columns: 125px minmax(0, 1fr);
   gap: clamp(22px, 5vw, 64px);
   align-items: center;
-  min-height: 215px;
+  min-height: 195px;
   margin-top: 18px;
   padding: clamp(28px, 5vw, 54px);
-  border: 3px solid var(--ink);
-  border-radius: 20px;
+  border: 2px solid var(--ink);
+  border-radius: 16px;
   background: linear-gradient(120deg, #fff8cc 0%, var(--warm) 100%);
-  box-shadow: 8px 8px 0 var(--signal);
+  box-shadow: 5px 5px 0 var(--signal);
 }
 
 .empty-rank {
@@ -518,7 +536,7 @@ a {
 .allocation-panel {
   margin-top: 34px;
   padding: 20px 24px;
-  border-left: 6px solid var(--signal);
+  border-left: 4px solid var(--signal);
   background: #eae7dd;
 }
 
@@ -530,6 +548,96 @@ a {
 
 .allocation-panel .required-disclosure {
   max-width: 100ch;
+}
+
+.recent-activity {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.recent-activity-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.recent-activity-heading h3,
+.recent-activity-heading p {
+  margin: 0;
+}
+
+.recent-activity-heading h3 {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.recent-activity-heading p {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.recent-payment-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-payment-list > li {
+  min-width: 0;
+}
+
+.recent-payment-link {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  height: 50px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.recent-payment-link:hover {
+  background: var(--card);
+}
+
+.recent-payment-logo {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.recent-payment-copy {
+  min-width: 0;
+}
+
+.recent-payment-copy strong,
+.recent-payment-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-payment-copy strong {
+  font-size: 0.82rem;
+}
+
+.recent-payment-copy span {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
 }
 
 .compact-header {
@@ -555,6 +663,56 @@ a {
   margin: 24px 0 42px;
   color: var(--muted);
   font-size: 1.2rem;
+}
+
+.stats-page .page-intro {
+  max-width: 720px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin: 0 0 32px;
+}
+
+.stat-card {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--ink);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+.stat-card dt {
+  color: var(--signal-dark);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stat-card dd {
+  margin-inline: 0;
+}
+
+.stat-value {
+  margin-top: 10px;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+}
+
+.stat-note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.stats-back-link {
+  font-weight: 800;
 }
 
 .eyebrow {
@@ -595,8 +753,8 @@ input,
 textarea {
   width: 100%;
   padding: 14px 15px;
-  border: 2px solid var(--ink);
-  border-radius: 0;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
   background: var(--card);
   box-shadow: none;
 }
@@ -858,7 +1016,7 @@ small,
   }
 
   .home-header {
-    min-height: 58px;
+    min-height: 56px;
     gap: 14px;
   }
 
@@ -882,8 +1040,8 @@ small,
   }
 
   .campaign-copy h1 {
-    font-size: clamp(2.1rem, 9.5vw, 3rem);
-    line-height: 0.88;
+    font-size: clamp(2.05rem, 9vw, 2.85rem);
+    line-height: 0.92;
   }
 
   .campaign-deck {
@@ -911,6 +1069,10 @@ small,
     font-size: 0.78rem;
   }
 
+  .campaign-stats-link {
+    margin-top: 10px;
+  }
+
   .board-heading {
     display: block;
     padding-block: 9px 8px;
@@ -931,9 +1093,14 @@ small,
     text-align: left;
   }
 
+  .founder-seed-note {
+    margin-top: 8px;
+    font-size: 0.72rem;
+  }
+
   .leader-stage,
   .leader-runners {
-    gap: 9px;
+    gap: 7px;
   }
 
   .leader-stage {
@@ -941,18 +1108,18 @@ small,
   }
 
   .listing-card {
-    grid-template-columns: 38px 54px minmax(0, 1fr);
+    grid-template-columns: 32px 44px minmax(0, 1fr);
     grid-template-rows: auto auto auto;
-    gap: 6px 8px;
+    gap: 4px 7px;
     min-height: 0;
-    padding: 12px 10px;
-    border-radius: 14px;
+    padding: 8px;
+    border-radius: 11px;
   }
 
   .listing-card-first {
-    grid-template-columns: 42px 62px minmax(0, 1fr);
-    padding: 13px 11px;
-    box-shadow: 5px 5px 0 var(--signal);
+    grid-template-columns: 35px 50px minmax(0, 1fr);
+    padding: 9px;
+    box-shadow: 3px 3px 0 var(--signal);
   }
 
   .rank {
@@ -963,27 +1130,28 @@ small,
   }
 
   .rank span {
-    font-size: 0.52rem;
+    font-size: 0.46rem;
   }
 
   .rank strong {
-    font-size: 1.75rem;
+    font-size: 1.45rem;
   }
 
   .listing-card-first .rank strong {
-    font-size: 2.25rem;
+    font-size: 1.78rem;
   }
 
   .listing-logo {
     grid-column: 2;
     grid-row: 1;
-    width: 54px;
-    height: 54px;
+    width: 44px;
+    height: 44px;
+    border-radius: 6px;
   }
 
   .listing-card-first .listing-logo {
-    width: 62px;
-    height: 62px;
+    width: 50px;
+    height: 50px;
   }
 
   .listing-copy {
@@ -992,83 +1160,85 @@ small,
   }
 
   .listing-copy h2 {
-    font-size: 1.04rem;
+    font-size: 0.95rem;
   }
 
   .listing-card-first .listing-copy h2 {
-    font-size: 1.27rem;
+    font-size: 1.08rem;
   }
 
   .listing-copy p {
     display: -webkit-box;
-    margin: 5px 0;
+    margin: 3px 0;
     overflow: hidden;
-    font-size: 0.7rem;
+    font-size: 0.64rem;
     line-height: 1.2;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
   }
 
   .listing-copy .listing-destination {
-    font-size: 0.64rem;
+    font-size: 0.58rem;
   }
 
   .listing-money {
     display: flex;
     grid-column: 2 / 4;
     grid-row: 2;
-    gap: 6px;
+    gap: 4px;
     align-items: baseline;
-    padding-top: 2px;
+    padding-top: 0;
     text-align: left;
   }
 
   .listing-money strong,
   .listing-card-first .listing-money strong {
-    font-size: 1.3rem;
+    font-size: 1.12rem;
   }
 
   .listing-money span {
-    font-size: 0.7rem;
+    font-size: 0.62rem;
   }
 
   .outbid-link {
     grid-column: 1 / 4;
     grid-row: 3;
     justify-self: stretch;
-    min-height: 38px;
-    padding: 8px 9px;
-    border: 2px solid var(--ink);
+    min-height: 30px;
+    padding: 5px 7px;
+    border: 1px solid var(--ink);
+    border-radius: 6px;
     background: var(--signal);
     color: var(--ink);
     text-align: center;
     text-decoration: none;
+    font-size: 0.68rem;
   }
 
   .leader-runners {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .leader-runners .listing-card {
-    grid-template-columns: 30px 44px minmax(0, 1fr);
-    padding: 10px 8px;
+    grid-template-columns: 26px 36px minmax(0, 1fr);
+    padding: 7px;
   }
 
   .leader-runners .rank span {
-    font-size: 0.46rem;
+    font-size: 0.42rem;
   }
 
   .leader-runners .rank strong {
-    font-size: 1.6rem;
+    font-size: 1.3rem;
   }
 
   .leader-runners .listing-logo {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
   }
 
   .leader-runners .listing-copy h2 {
-    font-size: 0.92rem;
+    font-size: 0.82rem;
   }
 
   .leader-runners .listing-copy p {
@@ -1076,8 +1246,8 @@ small,
   }
 
   .leader-runners .listing-copy .listing-destination {
-    margin-top: 3px;
-    font-size: 0.57rem;
+    margin-top: 2px;
+    font-size: 0.53rem;
   }
 
   .leader-runners .listing-money {
@@ -1085,21 +1255,21 @@ small,
   }
 
   .leader-runners .listing-money strong {
-    font-size: 1.18rem;
+    font-size: 1.02rem;
   }
 
   .leader-runners .outbid-link {
-    font-size: 0.63rem;
+    font-size: 0.58rem;
   }
 
   .leader-runners > .listing-card:only-child {
     grid-column: 1 / -1;
-    grid-template-columns: 38px 54px minmax(0, 1fr);
+    grid-template-columns: 32px 44px minmax(0, 1fr);
   }
 
   .leader-runners > .listing-card:only-child .listing-logo {
-    width: 54px;
-    height: 54px;
+    width: 44px;
+    height: 44px;
   }
 
   .leader-runners > .listing-card:only-child .listing-copy p {
@@ -1107,7 +1277,7 @@ small,
   }
 
   .listing-stack-rest {
-    margin-top: 24px;
+    margin-top: 18px;
   }
 
   .empty-board {
@@ -1144,6 +1314,53 @@ small,
 
   .allocation-panel .allocation {
     font-size: 0.86rem;
+  }
+
+  .recent-activity {
+    margin-top: 16px;
+    padding-top: 12px;
+  }
+
+  .recent-activity-heading {
+    display: block;
+  }
+
+  .recent-activity-heading p {
+    margin-top: 2px;
+    font-size: 0.64rem;
+  }
+
+  .recent-payment-list {
+    gap: 5px;
+    margin-top: 8px;
+  }
+
+  .recent-payment-link {
+    display: block;
+    height: 54px;
+    padding: 8px;
+  }
+
+  .recent-payment-logo {
+    display: none;
+  }
+
+  .recent-payment-copy strong {
+    font-size: 0.72rem;
+  }
+
+  .recent-payment-copy span {
+    margin-top: 3px;
+    font-size: 0.58rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 16px;
   }
 
   .manage-stats {

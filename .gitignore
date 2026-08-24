@@ -2,6 +2,7 @@ node_modules/
 dist/
 .wrangler/
 coverage/
+graphify-out/
 .DS_Store
 
 .env

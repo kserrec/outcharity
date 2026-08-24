@@ -1,8 +1,8 @@
 # Outcharity session handoff
 
-This handoff is current through the public `v0.1.0` open-source release and repository-security
-stabilization on 2026-08-22. It becomes stale on the next runtime-affecting `main` commit,
-production Worker deploy, or private reconciliation of the first confirmed public listing.
+This handoff is current through the Cloudflare-backed public visit count and production smoke test
+on 2026-08-23. It becomes stale on the next runtime-affecting commit, production Worker deploy, or
+private reconciliation of the first confirmed public listing.
 
 ## Exact stop point
 
@@ -13,30 +13,46 @@ production Worker deploy, or private reconciliation of the first confirmed publi
   inert Stripe-shaped test fixtures added in historical commit `d63d4cf`; it does not weaken any
   detection rule or exclude any source path. GitHub Security runs `32593742789` and `32594745669`
   pass, and native GitHub secret scanning plus push protection are enabled.
-- The most recently verified production Worker version remains
-  `0530675f-0de1-4370-b604-a6a4130a2120`. From its source commit `55c739d` through `v0.1.0`, every
-  runtime-affecting path (`src/`, `public/`, `db/`, and `wrangler.jsonc`) is unchanged. The newer
-  changes are the MIT license, repository docs/metadata, and Gitleaks allowlist, so production
-  already runs the exact current code, assets, schema, and configuration. No no-op Worker version
-  was created.
+- Production runs Worker version `bcd1a77d-8d52-4843-ba85-70aaebdf5f31`, deployed from the source
+  now recorded on `main`. It replaced version `f2dd830d-1dcf-4e5c-a666-b055e526bbd7`, which is the
+  immediate rollback target. The deployment includes the current visual refresh, recent-activity strip,
+  one-dollar minimum, campaign headline, one-row mobile leaderboard, public `/stats` work, permanent
+  primary-navigation Stats link, and Cloudflare-backed visit total. Those runtime changes and their
+  verification evidence are committed, so `origin/main` is the recovery source for the deployed
+  version.
 - Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. The homepage now shows a confirmed
-  `Outcharity` listing at #1 with `$100` given, and its production PNG logo returns `200`. This is
-  public evidence of the confirmed-listing read path only; the matching Stripe event, D1 rows,
-  charity hold state, and eventual GoodAPI record have not been privately reconciled.
+  four-entry leaderboard and links to Stats from the primary navigation, campaign panel, and footer.
+  `/stats` returns six aggregate cards, its canonical URL is correct, the sitemap includes it, and
+  the deployed mobile stylesheet gives each leaderboard entry and stats card its own row. Homepage
+  totals and `/stats` now count only eligible payments from the four advertisers currently on the
+  board: `$7` paid and `$6.30` allocated to charity. The hidden founder `$100` contribution no longer
+  affects those public numbers; its matching Stripe event, D1 rows, charity hold state, and eventual
+  GoodAPI record have not been privately reconciled.
+- The sixth card reports 369 Website visits from the first successful Cloudflare Web Analytics sync
+  at `2026-08-24T04:30:48.628Z`. This is an aggregate entry count rather than unique people or page
+  views; bots are excluded, and European visits are absent because the existing automatic-injection
+  setup does not collect them. D1 retains only daily counts and fetch timestamps.
 
 ## Release verification
 
-- A fresh `npm ci` completed. All 70 tests pass, `npm run check` passes, and `npm run build` passes
-  while explicitly using `/dev/null` as Wrangler's environment file. The dry Worker upload is
-  823.46 KiB raw and 115.34 KiB compressed.
+- All 83 tests pass, `npm run check` passes, `git diff --check` passes, and `npm run build` passes
+  while explicitly using `/dev/null` as Wrangler's environment file. The Worker upload is 837.79
+  KiB raw and 119.03 KiB compressed, with a 5 ms startup time.
+- Production D1 applied only `0004_web_analytics.sql`; both new tables were verified empty before
+  deployment, and Wrangler then reported no pending migrations. Wrangler 4.125.0 deployed the
+  Worker to the `outcharity.com` custom domain with no additional asset upload and retained the
+  15-minute scheduled trigger.
 - `npm audit` and `npm audit --omit=dev` both report zero vulnerabilities. GitHub Dependabot has
   zero open alerts and automatic security updates remain enabled.
 - The checksum-pinned Gitleaks 8.30.1 archive matches SHA-256
   `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; the exact CI command scans
   full Git history while explicitly excluding every dotenv pattern and reports no leak.
-- `git diff --check` passes. Live read-only checks pass for the homepage, submission page, legal
-  pages, sitemap, robots, HTTP-to-HTTPS redirect, security headers, invalid private-link responses,
-  and the confirmed public logo. Responsive hierarchy remains covered by the passing tests.
+- Live read-only checks after this deployment pass for health, homepage, `/stats`, sitemap, and the
+  deployed stylesheet. The live homepage reports `$7` paid and `$6.30` to charity; `/stats` reports
+  those values plus four payments, four advertisers, a `$1.75` average, and 369 Website visits.
+  Exact 320 px Chrome device emulation from the prior navigation deployment shows the wordmark plus
+  Leaderboard, Stats, About, and Rules on one line with no horizontal overflow; the current deploy
+  changed no asset.
 
 ## Production state that remains in force
 
@@ -45,18 +61,24 @@ production Worker deploy, or private reconciliation of the first confirmed publi
   non-live webhook events.
 - Confirmed contributions remain immutable. Refunds and disputes hide the listing, remove the
   affected payment from rank and public totals, and prevent charity delivery while suspended.
+  Payments belonging to any otherwise hidden listing are also absent from homepage and `/stats`
+  aggregates, so public money totals match the advertisers currently represented on the board.
 - Charity delivery remains held for 30 days and retried by the 15-minute scheduled task. A payment
   within the hold window sends nothing to GoodAPI after a recorded refund or dispute.
-- Production D1 migrations 0001 through 0003 and all five recorded triggers were verified before
-  Worker version `0530675f-0de1-4370-b604-a6a4130a2120` was deployed.
+- Production D1 migrations 0001 through 0004 and all five existing triggers remain in force;
+  migration 0004 adds only the daily visit-total and sync-state tables.
 - The Stripe production webhook was previously verified with its five required event types, and
   the live GoodAPI charity configuration was previously verified. Provider secrets remain only in
   encrypted provider storage and never entered the repository or chat.
+- `CLOUDFLARE_ANALYTICS_TOKEN` is stored only as an encrypted Worker secret with read-only Account
+  Analytics permission. Its value never entered the repository or chat. An analytics failure is
+  logged without interrupting the charity-delivery task or replacing the last successful count.
 
 ## Remaining Phase 7 work
 
-1. Reconcile the public `$100` listing against Stripe, the signed webhook delivery, D1 advertiser
-   and contribution rows, its 30-day hold status, cache invalidation, and GoodAPI's current state.
+1. Reconcile the existing founder `$100` contribution against Stripe, the signed webhook delivery,
+   D1 advertiser and contribution rows, its 30-day hold status, cache invalidation, and GoodAPI's
+   current state. Its listing is hidden and its money is excluded from all public aggregates.
 2. Resend that genuine Stripe webhook once and verify D1 and GoodAPI idempotency prevent duplicate
    financial records.
 3. Observe the earlier unpaid Checkout Session's expiration webhook and confirm its temporary logo
@@ -70,9 +92,9 @@ production Worker deploy, or private reconciliation of the first confirmed publi
 
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch and upstream: `main` tracking `origin/main`
+- Generated `graphify-out/` data remains local and is ignored; it is not part of the repository.
 - Public release: `https://github.com/kserrec/outcharity/releases/tag/v0.1.0`
 - The old draft pull request is merged and is no longer the release path. New finished work goes to
   `main` unless a later documented workflow says otherwise.
-- A Wrangler device-login attempt timed out without authorization. Future runtime-affecting work
-  needs a usable Cloudflare OAuth login or API token before deployment; this release did not need
-  one because its production inputs are unchanged.
+- Wrangler OAuth is usable for `kserrec@gmail.com` on `Kserrec@gmail.com's Account`; the current
+  deployment and post-deploy checks completed through that authenticated account.
