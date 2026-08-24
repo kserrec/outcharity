@@ -69,6 +69,9 @@ test('leaderboard listings and totals come from one database snapshot', async ()
                 recent_position: 1,
                 gross_cents: 1_000,
                 charity_cents: 900,
+                payment_count: 1,
+                visit_count: 368,
+                visit_count_updated_at: '2026-08-24T04:00:00.000Z',
               },
             ],
           };
@@ -90,11 +93,16 @@ test('leaderboard listings and totals come from one database snapshot', async ()
     },
   ]);
   assert.equal(board.charityCents, 900);
+  assert.equal(board.paymentCount, 1);
+  assert.equal(board.advertiserCount, 1);
+  assert.equal(board.visitCount, 368);
   assert.equal('gross_cents' in board.advertisers[0], false);
+  assert.equal('payment_count' in board.advertisers[0], false);
+  assert.equal('visit_count' in board.advertisers[0], false);
   assert.equal('recent_position' in board.advertisers[0], false);
 });
 
-test('public totals use only eligible payments from advertisers currently on the board', async (context) => {
+test('public totals follow the board while delivery stats preserve every charity-share status', async (context) => {
   const db = new TestD1Database();
   context.after(() => db.close());
   const alphaId = '13131313-1313-4313-8313-131313131313';
@@ -146,19 +154,50 @@ test('public totals use only eligible payments from advertisers currently on the
     )
     .bind('pi_stats_alpha_second')
     .run();
+  await db
+    .prepare(
+      `UPDATE contributions
+       SET charity_delivery_status = 'delivered'
+       WHERE stripe_checkout_session_id IN ('cs_stats_alpha_first', 'cs_stats_bravo')`,
+    )
+    .run();
+  await db
+    .prepare(
+      "INSERT INTO payment_suspensions (stripe_payment_intent_id, reason) VALUES (?, 'test')",
+    )
+    .bind('pi_stats_bravo')
+    .run();
+  await db
+    .prepare(
+      "UPDATE contributions SET charity_delivery_status = 'failed' WHERE stripe_checkout_session_id = ?",
+    )
+    .bind('cs_stats_alpha_third')
+    .run();
 
   const board = await getLeaderboard(db);
   assert.deepEqual(board.advertisers.map((entry) => entry.name), ['Alpha Stats']);
   assert.equal(board.grossCents, 204);
   assert.equal(board.charityCents, 184);
-  assert.deepEqual(await getPublicStats(db), {
+  assert.equal(board.paymentCount, 2);
+  assert.equal(board.advertiserCount, 1);
+  assert.equal(board.visitCount, null);
+  const stats = await getPublicStats(db);
+  assert.deepEqual(stats, {
     totalPaidCents: 204,
     charityCents: 184,
+    recordedCharityCents: 456,
+    deliveredCharityCents: 271,
+    awaitingCharityCents: 93,
+    stoppedCharityCents: 92,
     paymentCount: 2,
     advertiserCount: 1,
     averagePaymentCents: 102,
     visitCount: null,
   });
+  assert.equal(
+    stats.deliveredCharityCents + stats.awaitingCharityCents + stats.stoppedCharityCents,
+    stats.recordedCharityCents,
+  );
 });
 
 test('public stats have an exact zero state', async (context) => {
@@ -168,6 +207,10 @@ test('public stats have an exact zero state', async (context) => {
   assert.deepEqual(await getPublicStats(db), {
     totalPaidCents: 0,
     charityCents: 0,
+    recordedCharityCents: 0,
+    deliveredCharityCents: 0,
+    awaitingCharityCents: 0,
+    stoppedCharityCents: 0,
     paymentCount: 0,
     advertiserCount: 0,
     averagePaymentCents: 0,

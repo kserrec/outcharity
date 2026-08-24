@@ -55,6 +55,7 @@ import {
 } from './providers.js';
 import {
   aboutPage,
+  helpPage,
   homePage,
   managePage,
   messagePage,
@@ -219,7 +220,15 @@ app.get('/', async (context) => {
   const config = configFor(context);
   const data = context.env.DB
     ? await getLeaderboard(context.env.DB)
-    : { advertisers: [], recentPayments: [], grossCents: 0, charityCents: 0 };
+    : {
+        advertisers: [],
+        recentPayments: [],
+        grossCents: 0,
+        charityCents: 0,
+        paymentCount: 0,
+        advertiserCount: 0,
+        visitCount: null,
+      };
   const response = await htmlResponse(
     context,
     homePage(config, data),
@@ -551,12 +560,17 @@ app.get('/logos/*', async (context) => {
 });
 
 app.get('/about', (context) => htmlResponse(context, aboutPage(configFor(context))));
+app.get('/help', (context) => htmlResponse(context, helpPage(configFor(context))));
 app.get('/stats', async (context) => {
   const stats = context.env.DB
     ? await getPublicStats(context.env.DB)
     : {
         totalPaidCents: 0,
         charityCents: 0,
+        recordedCharityCents: 0,
+        deliveredCharityCents: 0,
+        awaitingCharityCents: 0,
+        stoppedCharityCents: 0,
         paymentCount: 0,
         advertiserCount: 0,
         averagePaymentCents: 0,
@@ -579,7 +593,7 @@ app.get('/health', (context) => {
 
 app.get('/sitemap.xml', (context) => {
   const config = configFor(context);
-  const urls = ['/', '/stats', '/about', '/terms', '/privacy'].map(
+  const urls = ['/', '/stats', '/help', '/about', '/terms', '/privacy'].map(
     (path) => `<url><loc>${config.siteUrl}${path === '/' ? '' : path}</loc></url>`,
   );
   return context.body(

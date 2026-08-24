@@ -5,7 +5,7 @@ import test from 'node:test';
 import { getConfig } from '../src/config.js';
 import { hashToken } from '../src/domain.js';
 import { app } from '../src/index.js';
-import { homePage, statsPage, submitPage, termsPage } from '../src/views.js';
+import { helpPage, homePage, statsPage, submitPage, termsPage } from '../src/views.js';
 import {
   configuredEnvironment as completeEnvironment,
   executionContext,
@@ -643,13 +643,68 @@ test('mobile homepage leaves only the CTA visible in the unframed campaign statu
   assert.match(mobileTotals, /display:\s*none/);
 });
 
-test('the stats page defines six public aggregates and stacks each card on mobile', () => {
+test('homepage leads with a compact campaign snapshot and links to full stats', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(
+    homePage(config, {
+      grossCents: 12_345,
+      charityCents: 11_111,
+      paymentCount: 4,
+      advertiserCount: 3,
+      visitCount: 368,
+      advertisers: [],
+    }),
+  );
+  const stripStart = document.indexOf('class="home-stats-strip"');
+  const headerStart = document.indexOf('class="home-header shell"');
+  const strip = document.slice(stripStart, headerStart);
+  const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const desktopStyles = styles.slice(0, styles.indexOf('@media (max-width: 760px)'));
+  const stripStyles =
+    desktopStyles.match(/\.home-stats-strip-inner\s*\{([^}]*)\}/)?.[1] || '';
+  const dotStyles = desktopStyles.match(/\.home-stat-dot\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.ok(stripStart >= 0 && stripStart < headerStart);
+  assert.match(strip, /\$123\.45[\s\S]*?given/);
+  assert.match(strip, />3<[\s\S]*?advertisers/);
+  assert.match(strip, />4<[\s\S]*?payments/);
+  assert.match(strip, />368<[\s\S]*?visits/);
+  assert.equal(strip.match(/class="home-stat-dot"/g)?.length, 4);
+  assert.match(strip, /class="home-stats-link" href="\/stats">Full stats/);
+  assert.match(stripStyles, /min-height:\s*34px/);
+  assert.match(dotStyles, /width:\s*6px/);
+  assert.match(dotStyles, /border-radius:\s*50%/);
+
+  const beforeFirstSync = String(
+    homePage(config, {
+      grossCents: 12_345,
+      charityCents: 11_111,
+      paymentCount: 4,
+      advertiserCount: 3,
+      visitCount: null,
+      advertisers: [],
+    }),
+  );
+  const unsyncedStrip = beforeFirstSync.slice(
+    beforeFirstSync.indexOf('class="home-stats-strip"'),
+    beforeFirstSync.indexOf('class="home-header shell"'),
+  );
+  assert.equal(unsyncedStrip.match(/class="home-stat-dot"/g)?.length, 3);
+  assert.doesNotMatch(unsyncedStrip, /visits/);
+});
+
+test('the stats page defines campaign aggregates and an exact charity-delivery ledger', () => {
   const environment = completeEnvironment();
   const config = getConfig(environment, environment.SITE_URL);
   const document = String(
     statsPage(config, {
       totalPaidCents: 12_345,
       charityCents: 11_111,
+      recordedCharityCents: 13_500,
+      deliveredCharityCents: 9_000,
+      awaitingCharityCents: 4_000,
+      stoppedCharityCents: 500,
       paymentCount: 4,
       advertiserCount: 3,
       averagePaymentCents: 3_086,
@@ -665,12 +720,14 @@ test('the stats page defines six public aggregates and stacks each card on mobil
   const mobileStart = styles.indexOf('@media (max-width: 760px)');
   const mobileEnd = styles.indexOf('@media (max-width: 350px)');
   const desktopGrid = styles.slice(0, mobileStart).match(/\.stats-grid\s*\{([^}]*)\}/)?.[1] || '';
+  const deliveryGrid =
+    styles.slice(0, mobileStart).match(/\.delivery-grid\s*\{([^}]*)\}/)?.[1] || '';
   const mobileGrid = styles
     .slice(mobileStart, mobileEnd)
     .match(/\.stats-grid\s*\{([^}]*)\}/)?.[1] || '';
 
   assert.match(document, /<link rel="canonical" href="https:\/\/outcharity\.com\/stats"/);
-  assert.equal(document.match(/class="stat-card"/g)?.length, 6);
+  assert.equal(document.match(/class="stat-card"/g)?.length, 9);
   for (const [label, value] of [
     ['Total paid', '$123.45'],
     ['To charity', '$111.11'],
@@ -678,6 +735,9 @@ test('the stats page defines six public aggregates and stacks each card on mobil
     ['Advertisers on the board', '3'],
     ['Average payment', '$30.86'],
     ['Website visits', '368'],
+    ['Accepted by provider', '$90'],
+    ['Awaiting provider', '$40'],
+    ['Stopped before delivery', '$5'],
   ]) {
     assert.match(document, new RegExp(`${label}[\\s\\S]*?${value.replace('$', '\\$')}`), label);
   }
@@ -688,28 +748,105 @@ test('the stats page defines six public aggregates and stacks each card on mobil
   assert.match(document, /rounded to the nearest cent/);
   assert.match(document, /not unique people/);
   assert.match(document, /Cloudflare excludes bots; European visits are not collected/);
+  assert.match(document, /\$135[\s\S]*?recorded at payment confirmation across all purchases/);
+  assert.match(document, /These three statuses cover every recorded charity share/);
+  assert.match(document, /GoodAPI returned a donation record/);
+  assert.match(document, /does not claim Outcharity independently observed/);
+  assert.match(document, /records from listings later hidden/);
+  assert.match(document, /already accepted share remains\s+recorded because it cannot be recalled/);
   assert.match(homepage, /class="campaign-stats-link" href="\/stats">See campaign stats/);
   assert.match(homepage, /<a href="\/stats">Stats<\/a>/);
   assert.equal(primaryNavigation.match(/<a /g)?.length, 4);
   assert.match(primaryNavigation, /href="\/stats">Stats<\/a>/);
   assert.match(desktopGrid, /repeat\(auto-fit,\s*minmax\(190px,\s*1fr\)\)/);
+  assert.match(deliveryGrid, /repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(mobileGrid, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 
   const beforeFirstSync = String(
     statsPage(config, {
       totalPaidCents: 12_345,
       charityCents: 11_111,
+      recordedCharityCents: 13_500,
+      deliveredCharityCents: 9_000,
+      awaitingCharityCents: 4_000,
+      stoppedCharityCents: 500,
       paymentCount: 4,
       advertiserCount: 3,
       averagePaymentCents: 3_086,
       visitCount: null,
     }),
   );
-  assert.equal(beforeFirstSync.match(/class="stat-card"/g)?.length, 5);
+  assert.equal(beforeFirstSync.match(/class="stat-card"/g)?.length, 8);
   assert.doesNotMatch(beforeFirstSync, /Website visits/);
 });
 
-test('the stats route reads one D1 aggregate and is listed in the public sitemap', async () => {
+test('the help page offers verified outside paths without tracking or changing primary navigation', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(helpPage(config));
+  const homepage = String(
+    homePage(config, {
+      grossCents: 12_345,
+      charityCents: 11_111,
+      paymentCount: 4,
+      advertiserCount: 3,
+      visitCount: 368,
+      advertisers: [],
+    }),
+  );
+  const expectedDestinations = [
+    'https://www.stjude.org/donate/donate-to-st-jude.html',
+    'https://www.givewell.org/charities/top-charities',
+    'https://www.givewell.org/top-charities-fund',
+    'https://www.irs.gov/charities-non-profits/tax-exempt-organization-search',
+    'https://consumer.ftc.gov/articles/giving-charity',
+    'https://www.redcrossblood.org/give.html/find-drive',
+    'https://www.feedingamerica.org/find-your-local-foodbank',
+    'https://www.idealist.org/en/volunteer',
+  ];
+  const resourceAnchors = [
+    ...document.matchAll(/<a\s+class="help-resource-link"([\s\S]*?)<\/a>/g),
+  ].map((match) => match[0]);
+  const destinations = resourceAnchors.map(
+    (anchor) => anchor.match(/href="([^"]+)"/)?.[1] || '',
+  );
+  const primaryNavigation =
+    homepage.match(/<nav aria-label="Primary navigation">([\s\S]*?)<\/nav>/)?.[1] || '';
+  const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
+  const mobileStart = styles.indexOf('@media (max-width: 760px)');
+  const mobileEnd = styles.indexOf('@media (max-width: 350px)');
+  const desktopHelpGrid =
+    styles.slice(0, mobileStart).match(/\.help-grid\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileHelpGrid =
+    styles.slice(mobileStart, mobileEnd).match(/\.help-grid\s*\{([^}]*)\}/)?.[1] || '';
+
+  assert.match(document, /<link rel="canonical" href="https:\/\/outcharity\.com\/help"/);
+  assert.match(document, /You don’t have to buy an ad to help/);
+  assert.deepEqual(destinations, expectedDestinations);
+  for (const anchor of resourceAnchors) {
+    assert.match(anchor, /target="_blank"/);
+    assert.match(anchor, /rel="noopener noreferrer"/);
+    assert.match(anchor, /aria-label="[^"]+ \(opens in a new tab\)"/);
+  }
+  for (const destination of destinations) {
+    assert.equal(new URL(destination).search, '', destination);
+  }
+  assert.match(document, /plain links with no affiliate or campaign tracking codes/);
+  assert.match(document, /does not\s+process outside donations or collect whether you donate/);
+  assert.match(document, /does not claim that any destination endorses or is affiliated/);
+  assert.match(document, /datetime="2026-08-24">August 24, 2026/);
+  assert.match(
+    homepage,
+    /class="campaign-help-link" href="\/help">Not here to advertise\? Help another way/,
+  );
+  assert.match(homepage, /<a href="\/help">Help more<\/a>/);
+  assert.equal(primaryNavigation.match(/<a /g)?.length, 4);
+  assert.doesNotMatch(primaryNavigation, /href="\/help"/);
+  assert.match(desktopHelpGrid, /repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(mobileHelpGrid, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+});
+
+test('the help and stats routes are public, canonical, and listed in the sitemap', async () => {
   let prepareCalls = 0;
   const environment = completeEnvironment({
     DB: {
@@ -720,6 +857,10 @@ test('the stats route reads one D1 aggregate and is listed in the public sitemap
             return {
               total_paid_cents: 1_234,
               charity_cents: 1_111,
+              recorded_charity_cents: 1_111,
+              delivered_charity_cents: 900,
+              awaiting_charity_cents: 211,
+              stopped_charity_cents: 0,
               payment_count: 2,
               advertiser_count: 1,
               visit_count: 368,
@@ -730,6 +871,19 @@ test('the stats route reads one D1 aggregate and is listed in the public sitemap
       },
     },
   });
+  const helpResponse = await app.fetch(
+    new Request('https://outcharity.com/help'),
+    environment,
+    executionContext,
+  );
+  const helpDocument = await helpResponse.text();
+
+  assert.equal(helpResponse.status, 200);
+  assert.equal(helpResponse.headers.get('Cache-Control'), 'no-store');
+  assert.equal(prepareCalls, 0, 'the help page must not query D1');
+  assert.match(helpDocument, /<link rel="canonical" href="https:\/\/outcharity\.com\/help"/);
+  assert.match(helpDocument, /Support St\. Jude directly/);
+
   const response = await app.fetch(
     new Request('https://outcharity.com/stats'),
     environment,
@@ -744,14 +898,19 @@ test('the stats route reads one D1 aggregate and is listed in the public sitemap
   assert.match(document, /To charity[\s\S]*?\$11\.11/);
   assert.match(document, /Average payment[\s\S]*?\$6\.17/);
   assert.match(document, /Website visits[\s\S]*?368/);
+  assert.match(document, /Accepted by provider[\s\S]*?\$9/);
+  assert.match(document, /Awaiting provider[\s\S]*?\$2\.11/);
+  assert.match(document, /Stopped before delivery[\s\S]*?\$0/);
 
   const sitemapResponse = await app.fetch(
     new Request('https://outcharity.com/sitemap.xml'),
     environment,
     executionContext,
   );
+  const sitemapDocument = await sitemapResponse.text();
   assert.equal(sitemapResponse.status, 200);
-  assert.match(await sitemapResponse.text(), /<loc>https:\/\/outcharity\.com\/stats<\/loc>/);
+  assert.match(sitemapDocument, /<loc>https:\/\/outcharity\.com\/stats<\/loc>/);
+  assert.match(sitemapDocument, /<loc>https:\/\/outcharity\.com\/help<\/loc>/);
   assert.equal(prepareCalls, 1, 'the sitemap must not query D1');
 });
 

@@ -50,7 +50,14 @@ export async function getLeaderboard(db) {
        totals AS (
          SELECT
            COALESCE(SUM(gross_amount_cents), 0) AS gross_cents,
-           COALESCE(SUM(charity_amount_cents), 0) AS charity_cents
+           COALESCE(SUM(charity_amount_cents), 0) AS charity_cents,
+           COUNT(*) AS payment_count,
+           (SELECT COALESCE(SUM(daily.visits), 0) FROM web_analytics_daily daily) AS visit_count,
+           (
+             SELECT sync.last_success_at
+             FROM web_analytics_sync sync
+             WHERE sync.singleton = 1
+           ) AS visit_count_updated_at
          FROM public_contributions
        ),
        latest_advertiser_contributions AS (
@@ -88,7 +95,10 @@ export async function getLeaderboard(db) {
          ${ADVERTISER_TOTAL_REACHED_ORDER_SQL} AS total_reached_order,
          recent.recent_position,
          totals.gross_cents,
-         totals.charity_cents
+         totals.charity_cents,
+         totals.payment_count,
+         totals.visit_count,
+         totals.visit_count_updated_at
        FROM totals
        LEFT JOIN advertisers a
          ON a.total_contributed_cents > 0 AND a.is_hidden = 0
@@ -109,6 +119,9 @@ export async function getLeaderboard(db) {
       ({
         gross_cents: _grossCents,
         charity_cents: _charityCents,
+        payment_count: _paymentCount,
+        visit_count: _visitCount,
+        visit_count_updated_at: _visitCountUpdatedAt,
         total_reached_order: _totalReachedOrder,
         recent_position: _recentPosition,
         ...advertiser
@@ -120,16 +133,59 @@ export async function getLeaderboard(db) {
     recentPayments,
     grossCents: Number(rows[0]?.gross_cents || 0),
     charityCents: Number(rows[0]?.charity_cents || 0),
+    paymentCount: Number(rows[0]?.payment_count || 0),
+    advertiserCount: advertisers.length,
+    visitCount: rows[0]?.visit_count_updated_at ? Number(rows[0].visit_count || 0) : null,
   };
 }
 
 export async function getPublicStats(db) {
   const row = await db
     .prepare(
-      `SELECT
+      `WITH delivery_stats AS (
+         SELECT
+           COALESCE(SUM(delivery.charity_amount_cents), 0) AS recorded_charity_cents,
+           COALESCE(SUM(
+             CASE
+               WHEN delivery.charity_delivery_status = 'delivered'
+               THEN delivery.charity_amount_cents
+               ELSE 0
+             END
+           ), 0) AS delivered_charity_cents,
+           COALESCE(SUM(
+             CASE
+               WHEN delivery.charity_delivery_status IN ('pending', 'failed')
+                AND NOT EXISTS (
+                  SELECT 1 FROM payment_suspensions awaiting_suspension
+                  WHERE awaiting_suspension.stripe_payment_intent_id =
+                    delivery.stripe_payment_intent_id
+                )
+               THEN delivery.charity_amount_cents
+               ELSE 0
+             END
+           ), 0) AS awaiting_charity_cents,
+           COALESCE(SUM(
+             CASE
+               WHEN delivery.charity_delivery_status IN ('pending', 'failed')
+                AND EXISTS (
+                  SELECT 1 FROM payment_suspensions stopped_suspension
+                  WHERE stopped_suspension.stripe_payment_intent_id =
+                    delivery.stripe_payment_intent_id
+                )
+               THEN delivery.charity_amount_cents
+               ELSE 0
+             END
+           ), 0) AS stopped_charity_cents
+         FROM contributions delivery
+       )
+       SELECT
          COALESCE(SUM(c.gross_amount_cents), 0) AS total_paid_cents,
          COALESCE(SUM(c.charity_amount_cents), 0) AS charity_cents,
          COUNT(*) AS payment_count,
+         (SELECT recorded_charity_cents FROM delivery_stats) AS recorded_charity_cents,
+         (SELECT delivered_charity_cents FROM delivery_stats) AS delivered_charity_cents,
+         (SELECT awaiting_charity_cents FROM delivery_stats) AS awaiting_charity_cents,
+         (SELECT stopped_charity_cents FROM delivery_stats) AS stopped_charity_cents,
          (SELECT COALESCE(SUM(daily.visits), 0) FROM web_analytics_daily daily) AS visit_count,
          (
            SELECT sync.last_success_at
@@ -150,6 +206,10 @@ export async function getPublicStats(db) {
   return {
     totalPaidCents,
     charityCents: Number(row?.charity_cents || 0),
+    recordedCharityCents: Number(row?.recorded_charity_cents || 0),
+    deliveredCharityCents: Number(row?.delivered_charity_cents || 0),
+    awaitingCharityCents: Number(row?.awaiting_charity_cents || 0),
+    stoppedCharityCents: Number(row?.stopped_charity_cents || 0),
     paymentCount,
     advertiserCount: Number(row?.advertiser_count || 0),
     averagePaymentCents: paymentCount === 0 ? 0 : Math.round(totalPaidCents / paymentCount),

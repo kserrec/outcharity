@@ -15,14 +15,29 @@ The browser receives ordinary HTML and CSS. Application-owned JavaScript is limi
 shortcuts and copy/share controls; Cloudflare automatically injects its existing Web Analytics
 measurement script for non-European visits.
 
-The public `/stats` page reads one current D1 aggregate for total paid, recorded charity allocation,
-counted payments, visible advertisers, average payment, and Cloudflare-recorded website visits.
-Money and payment counts include only eligible contributions from advertisers currently visible on
-the board, so hidden listings and refunded or disputed payments do not affect any public total. A
-visit is an entry from a direct link or another website, not a unique person or every page view.
+The public `/stats` page reads one current D1 statement for total paid, the currently counted
+charity allocation, counted payments, visible advertisers, average payment, Cloudflare-recorded
+website visits, and charity-delivery status. Money and payment counts include only eligible
+contributions from advertisers currently visible on the board, so hidden listings and refunded or
+disputed payments do not affect that campaign snapshot.
+
+The delivery ledger separately preserves every recorded charity share, including aggregate history
+from listings later hidden. Each share is exactly one of: accepted by GoodAPI with a donation
+record, awaiting GoodAPI after the verification hold or a failed attempt, or stopped before
+delivery because its payment was refunded or disputed. Provider acceptance does not claim
+Outcharity independently observed the charity's bank receipt. No individual payment or provider
+identifier is published.
+
+A visit is an entry from a direct link or another website, not a unique person or every page view.
 Cloudflare excludes bots, and the configured automatic injection does not collect European visits.
 Outcharity stores only daily aggregate totals—never an individual visit, IP address, browser detail,
 or tracking identifier.
+
+The server-rendered `/help` page gives visitors useful paths even when they do not want a
+leaderboard listing: the featured charity's official donation page, GiveWell research and pooled
+giving, IRS and FTC verification guidance, and blood, food-bank, and volunteer searches. They are
+plain external links without affiliate or campaign query parameters. Outcharity does not process
+those outside donations or collect whether a visitor completes an outside action.
 
 The live production Worker bundle is 109.41 KiB compressed at the launch deployment. There are
 two runtime packages: Hono supplies hardened routing and HTML escaping with no transitive packages,

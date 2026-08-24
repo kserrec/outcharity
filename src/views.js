@@ -38,6 +38,7 @@ function page(config, { title, description = SITE_DESCRIPTION, path = '/', body,
           <a href="/">Outcharity</a>
           <nav aria-label="Legal and project information">
             <a href="/stats">Stats</a>
+            <a href="/help">Help more</a>
             <a href="/about">About</a>
             <a href="/terms">Terms</a>
             <a href="/privacy">Privacy</a>
@@ -54,16 +55,56 @@ function brandHeader() {
   </header>`;
 }
 
-function homeHeader() {
-  return html`<header class="home-header shell">
-    <a class="wordmark" href="/" aria-label="Outcharity home">Outcharity</a>
-    <nav aria-label="Primary navigation">
-      <a href="#leaderboard-title">Leaderboard</a>
-      <a href="/stats">Stats</a>
-      <a href="/about">About</a>
-      <a href="/terms">Rules</a>
-    </nav>
-  </header>`;
+function formatCount(value) {
+  return Number(value || 0).toLocaleString('en-US');
+}
+
+function homeStat(value, label) {
+  return html`<li>
+    <span class="home-stat-dot" aria-hidden="true"></span>
+    <strong>${value}</strong>
+    <span>${label}</span>
+  </li>`;
+}
+
+function homeStatsStrip(data) {
+  const advertiserCount = data.advertiserCount ?? data.advertisers?.length ?? 0;
+  const items = [
+    homeStat(formatMoney(data.grossCents), 'given'),
+    homeStat(
+      formatCount(advertiserCount),
+      Number(advertiserCount) === 1 ? 'advertiser' : 'advertisers',
+    ),
+    homeStat(
+      formatCount(data.paymentCount),
+      Number(data.paymentCount) === 1 ? 'payment' : 'payments',
+    ),
+  ];
+  if (data.visitCount !== null && data.visitCount !== undefined) {
+    items.push(homeStat(formatCount(data.visitCount), 'visits'));
+  }
+
+  return html`<div class="home-stats-strip">
+    <div class="shell home-stats-strip-inner">
+      <ul class="home-stats-list" aria-label="Campaign snapshot">
+        ${items}
+      </ul>
+      <a class="home-stats-link" href="/stats">Full stats <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>`;
+}
+
+function homeHeader(data) {
+  return html`${homeStatsStrip(data)}
+    <header class="home-header shell">
+      <a class="wordmark" href="/" aria-label="Outcharity home">Outcharity</a>
+      <nav aria-label="Primary navigation">
+        <a href="#leaderboard-title">Leaderboard</a>
+        <a href="/stats">Stats</a>
+        <a href="/about">About</a>
+        <a href="/terms">Rules</a>
+      </nav>
+    </header>`;
 }
 
 function allocationStatement(config, { compact = false } = {}) {
@@ -166,7 +207,7 @@ export function homePage(config, data) {
     ? html`<a class="button button-primary" href="/submit">Get on the board</a>`
     : html`<span class="button button-disabled" aria-disabled="true">Opening after final checks</span>`;
 
-  const body = html`${homeHeader()}
+  const body = html`${homeHeader(data)}
     <main class="home-main">
       <section class="campaign-mast shell" aria-labelledby="campaign-title">
         <div class="campaign-copy">
@@ -188,6 +229,7 @@ export function homePage(config, data) {
             : ''}
           ${heroCta}
           <a class="campaign-stats-link" href="/stats">See campaign stats</a>
+          <a class="campaign-help-link" href="/help">Not here to advertise? Help another way</a>
         </div>
       </section>
 
@@ -238,10 +280,6 @@ export function homePage(config, data) {
   return page(config, { title: 'Outcharity', path: '/', body });
 }
 
-function formatCount(value) {
-  return Number(value || 0).toLocaleString('en-US');
-}
-
 function statCard(label, value, note) {
   return html`<div class="stat-card">
     <dt>${label}</dt>
@@ -287,6 +325,23 @@ export function statsPage(config, stats) {
       ),
     );
   }
+  const deliveryCards = [
+    statCard(
+      'Accepted by provider',
+      formatMoney(stats.deliveredCharityCents),
+      'GoodAPI accepted the charity share and returned a donation record.',
+    ),
+    statCard(
+      'Awaiting provider',
+      formatMoney(stats.awaitingCharityCents),
+      `Eligible shares still in the ${config.charityHoldDays}-day verification period or queued for another delivery attempt.`,
+    ),
+    statCard(
+      'Stopped before delivery',
+      formatMoney(stats.stoppedCharityCents),
+      'Shares not sent because the payment was refunded or disputed before provider acceptance.',
+    ),
+  ];
   const body = html`${brandHeader()}
     <main class="shell page-main stats-page">
       <p class="eyebrow">Campaign stats</p>
@@ -296,6 +351,31 @@ export function statsPage(config, stats) {
         disputed payments are excluded, and individual transactions or visits are not published.
       </p>
       <dl class="stats-grid">${cards}</dl>
+      <section class="delivery-ledger" aria-labelledby="delivery-ledger-title">
+        <div class="delivery-ledger-heading">
+          <div>
+            <p class="eyebrow">Charity delivery</p>
+            <h2 id="delivery-ledger-title">Where every recorded charity share stands.</h2>
+          </div>
+          <p>
+            <strong>${formatMoney(stats.recordedCharityCents)}</strong>
+            recorded at payment confirmation across all purchases.
+          </p>
+        </div>
+        <dl class="stats-grid delivery-grid">${deliveryCards}</dl>
+        <div class="delivery-ledger-note">
+          <p>
+            These three statuses cover every recorded charity share. “Accepted by provider” means
+            GoodAPI returned a donation record; it does not claim Outcharity independently observed
+            the charity’s bank receipt.
+          </p>
+          <p>
+            The delivery ledger keeps aggregate records from listings later hidden. A refund or
+            dispute before provider acceptance stops delivery; an already accepted share remains
+            recorded because it cannot be recalled.
+          </p>
+        </div>
+      </section>
       <a class="text-link stats-back-link" href="/">Back to the leaderboard</a>
     </main>`;
 
@@ -530,6 +610,149 @@ export function successPage(config, contribution, managementTokenIsValid, manage
     </main>`;
 
   return page(config, { title: 'Payment successful', body, privatePage: true });
+}
+
+function externalHelpLink(href, label) {
+  return html`<a
+    class="help-resource-link"
+    href="${href}"
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label="${label} (opens in a new tab)"
+  >
+    <span>${label}</span>
+    <span aria-hidden="true">↗</span>
+  </a>`;
+}
+
+export function helpPage(config) {
+  const body = html`${brandHeader()}
+    <main class="shell page-main help-page">
+      <p class="eyebrow">More ways to help</p>
+      <h1>You don’t have to buy an ad to help.</h1>
+      <p class="page-intro">
+        The leaderboard is one way to turn advertising money into a charity allocation. If that
+        is not right for you, these direct, research, and non-monetary paths are here for you too.
+      </p>
+
+      <div class="help-grid">
+        <article class="help-card help-card-featured">
+          <p class="help-card-kicker">Featured charity</p>
+          <h2>Support St. Jude directly.</h2>
+          <p>
+            Give on St. Jude Children’s Research Hospital’s own site without purchasing an
+            Outcharity listing.
+          </p>
+          <ul class="help-link-list">
+            <li>
+              ${externalHelpLink(
+                'https://www.stjude.org/donate/donate-to-st-jude.html',
+                'Open the official St. Jude donation page',
+              )}
+            </li>
+          </ul>
+        </article>
+
+        <article class="help-card">
+          <p class="help-card-kicker">Evidence-led giving</p>
+          <h2>Compare researched options.</h2>
+          <p>
+            GiveWell publishes its evidence, current recommended programs, and grant decisions.
+            Read the research and decide whether its charities or pooled fund fit your priorities.
+          </p>
+          <ul class="help-link-list">
+            <li>
+              ${externalHelpLink(
+                'https://www.givewell.org/charities/top-charities',
+                'See GiveWell’s current top charities',
+              )}
+            </li>
+            <li>
+              ${externalHelpLink(
+                'https://www.givewell.org/top-charities-fund',
+                'Read about GiveWell’s Top Charities Fund',
+              )}
+            </li>
+          </ul>
+        </article>
+
+        <article class="help-card">
+          <p class="help-card-kicker">Check before giving</p>
+          <h2>Research a charity yourself.</h2>
+          <p>
+            Confirm a United States organization’s tax-exempt status and filings, then review
+            practical guidance for recognizing donation scams and pressure tactics.
+          </p>
+          <ul class="help-link-list">
+            <li>
+              ${externalHelpLink(
+                'https://www.irs.gov/charities-non-profits/tax-exempt-organization-search',
+                'Search IRS tax-exempt organization records',
+              )}
+            </li>
+            <li>
+              ${externalHelpLink(
+                'https://consumer.ftc.gov/articles/giving-charity',
+                'Read the FTC’s charity-giving guidance',
+              )}
+            </li>
+          </ul>
+        </article>
+
+        <article class="help-card">
+          <p class="help-card-kicker">No purchase required</p>
+          <h2>Give blood, food, or time.</h2>
+          <p>
+            Money is not the only useful resource. Find a nearby blood drive, connect with a local
+            food bank, or search for a volunteer role that matches your time and skills.
+          </p>
+          <ul class="help-link-list">
+            <li>
+              ${externalHelpLink(
+                'https://www.redcrossblood.org/give.html/find-drive',
+                'Find an American Red Cross blood drive',
+              )}
+            </li>
+            <li>
+              ${externalHelpLink(
+                'https://www.feedingamerica.org/find-your-local-foodbank',
+                'Find a local Feeding America food bank',
+              )}
+            </li>
+            <li>
+              ${externalHelpLink(
+                'https://www.idealist.org/en/volunteer',
+                'Find volunteer opportunities on Idealist',
+              )}
+            </li>
+          </ul>
+        </article>
+      </div>
+
+      <aside class="help-trust-note" aria-labelledby="help-trust-title">
+        <h2 id="help-trust-title">What happens when you leave Outcharity</h2>
+        <p>
+          These are plain links with no affiliate or campaign tracking codes. Outcharity does not
+          process outside donations or collect whether you donate, give blood, or volunteer. The
+          destination site controls its own eligibility rules, terms, privacy practices, and
+          receipts. Outcharity does not claim that any destination endorses or is affiliated with
+          this project.
+        </p>
+        <p class="fine-print">
+          Destinations last checked <time datetime="2026-08-24">August 24, 2026</time>.
+        </p>
+      </aside>
+
+      <a class="text-link help-back-link" href="/">Back to the leaderboard</a>
+    </main>`;
+
+  return page(config, {
+    title: 'More ways to help',
+    description:
+      'Direct charity, research, blood donation, food-bank, and volunteer resources from Outcharity.',
+    path: '/help',
+    body,
+  });
 }
 
 export function aboutPage(config) {

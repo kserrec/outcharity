@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { syncCloudflareVisits } from '../src/analytics.js';
-import { getPublicStats, getWebAnalyticsLastSuccess } from '../src/db.js';
+import { getLeaderboard, getPublicStats, getWebAnalyticsLastSuccess } from '../src/db.js';
 import { TestD1Database } from './helpers/d1.js';
 
 function analyticsEnvironment(db, overrides = {}) {
@@ -72,6 +72,7 @@ test('analytics sync stores only bot-filtered daily visit totals and preserves z
   ]);
   assert.equal(await getWebAnalyticsLastSuccess(db), now.toISOString());
   assert.equal((await getPublicStats(db)).visitCount, 368);
+  assert.equal((await getLeaderboard(db)).visitCount, 368);
 });
 
 test('a recent successful sync prevents another Cloudflare request', async (context) => {

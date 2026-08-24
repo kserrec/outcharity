@@ -459,3 +459,46 @@ money rules, with no new dependency, data store, or tracking surface.
 Exit: `/stats` publishes an automatically refreshed, bot-filtered aggregate website-visit total
 without claiming unique viewers or retaining visitor-level data, while all existing money and
 charity-delivery behavior remains intact.
+
+## Phase 10 — More ways to help and charity-delivery transparency
+
+- [x] Add a server-rendered public `/help` page for visitors who do not want to purchase a
+  leaderboard listing.
+  - It links to St. Jude's official donation form, GiveWell's current charity research and Top
+    Charities Fund, IRS and FTC verification guidance, the American Red Cross blood-drive search,
+    Feeding America's food-bank search, and Idealist's volunteer search
+  - Every destination was opened and verified on 2026-08-24. The page uses plain destination URLs
+    without affiliate or campaign query parameters, opens them with `noopener noreferrer`, and
+    states that Outcharity neither processes nor observes the outside action
+- [x] Make the alternative visible without turning it into a fifth primary-navigation item.
+  - The homepage campaign panel now says “Not here to advertise? Help another way,” every public
+    footer links to “Help more,” and `/help` is canonical and included in the sitemap
+  - The four-link primary navigation remains unchanged and still fits the 320 px supported minimum
+- [x] Extend the existing one-statement `/stats` snapshot with an exact delivery ledger and add no
+  migration.
+  - Every recorded charity share is partitioned into provider-accepted, awaiting-provider, or
+    stopped-before-delivery amounts. Delivered shares remain historically accepted even if their
+    listing is later hidden or payment later suspended; pending and failed shares move to stopped
+    only when a refund or dispute prevents delivery
+  - The page defines provider acceptance narrowly as GoodAPI returning a donation record and does
+    not claim Outcharity independently observed the charity's bank receipt
+- [x] Prove data partitioning, hidden and suspended history, zero state, page trust copy, exact
+  destinations, external-link isolation, route behavior, sitemap discovery, and responsive layout.
+  - All 85 tests, `npm run check`, the dotenv-isolated 121.46 KiB compressed dry build, and
+    `git diff --check` pass
+  - Local Chrome screenshots at 1440 px, 390 px, and 320 px show the homepage entry point, help
+    cards, delivery ledger, footer, and unchanged primary navigation without horizontal overflow
+  - No package, migration, data store, browser-side tracking, payment behavior, provider behavior,
+    or production configuration was added or changed
+  - Worker version `6dd38ec9-37e9-4aa9-a81a-f171aed8a714` receives 100% of production traffic;
+    version `ae4b56be-8208-4cab-b3a5-fe0a05819476` is the immediate rollback target
+  - Live `/`, `/help`, `/stats`, `/sitemap.xml`, and `/health` return 200. Checkout remains enabled;
+    the homepage publishes `$7`, four advertisers, four payments, and 393 visits; and the delivery
+    ledger partitions all `$96.30` of recorded charity shares into `$0` accepted, `$96.30` awaiting,
+    and `$0` stopped
+  - The live help page has its canonical URL, all eight verified plain destinations, the promised
+    outside-action disclosure, and `no-store`, CSP, HSTS, referrer-policy, and frame-denial headers
+
+Exit: Visitors have a trustworthy non-advertising path to direct giving, researched giving, and
+non-monetary service, while the stats page publishes an exact aggregate record of what happened to
+every charity share.
