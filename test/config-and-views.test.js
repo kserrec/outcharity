@@ -629,6 +629,8 @@ test('mobile homepage leaves only the CTA visible in the unframed campaign statu
   const mobileStatus = mobileStyles.match(/\.campaign-status\s*\{([^}]*)\}/)?.[1] || '';
   const mobileTotals =
     mobileStyles.match(/\.campaign-total,\s*\.charity-total\s*\{([^}]*)\}/)?.[1] || '';
+  const mobileStatsLink =
+    mobileStyles.match(/\.campaign-stats-link\s*\{([^}]*)\}/)?.[1] || '';
 
   assert.match(document, /The remaining 10% keeps Outcharity running\./);
   assert.doesNotMatch(document, /The remaining 10% supports Outcharity\./);
@@ -641,6 +643,7 @@ test('mobile homepage leaves only the CTA visible in the unframed campaign statu
   assert.match(mobileStatus, /background:\s*transparent/);
   assert.match(mobileStatus, /box-shadow:\s*none/);
   assert.match(mobileTotals, /display:\s*none/);
+  assert.match(mobileStatsLink, /display:\s*none/);
 });
 
 test('homepage leads with a compact campaign snapshot and links to full stats', () => {

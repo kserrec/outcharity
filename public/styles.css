@@ -1336,7 +1336,7 @@ small,
   }
 
   .campaign-stats-link {
-    margin-top: 10px;
+    display: none;
   }
 
   .campaign-help-link {
