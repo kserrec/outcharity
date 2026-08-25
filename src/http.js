@@ -248,6 +248,21 @@ export async function htmlResponse(context, document, status = 200, cacheControl
   return response;
 }
 
+// Public-data pages stay in the Worker's five-second Cache API entry, while browsers and social
+// crawlers must revalidate their stored HTML before reusing its social-card metadata.
+export function revalidatingPublicResponse(response) {
+  const revalidatingResponse = new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: new Headers(response.headers),
+  });
+  revalidatingResponse.headers.set(
+    'Cache-Control',
+    'public, no-cache, max-age=0, must-revalidate',
+  );
+  return revalidatingResponse;
+}
+
 function cacheKeyFor(request, pathname = new URL(request.url).pathname) {
   const url = new URL(request.url);
   url.pathname = pathname;

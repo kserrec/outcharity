@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -55,6 +56,49 @@ test('the default contribution starts at the one-dollar minimum', () => {
   assert.match(document, /data-amount="1"/);
   assert.match(document, /name="amount"\s+value="1"/);
   assert.match(document, /Minimum \$1\./);
+});
+
+test('social preview metadata uses the current content-fingerprinted image', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(
+    homePage(config, {
+      advertisers: [],
+      recentPayments: [],
+      grossCents: 0,
+      charityCents: 0,
+      paymentCount: 0,
+      advertiserCount: 0,
+      visitCount: null,
+    }),
+  );
+  const sourceImage = readFileSync(new URL('../public/og.png', import.meta.url));
+  const fingerprint = createHash('sha256').update(sourceImage).digest('hex').slice(0, 8);
+  const fingerprintedImage = readFileSync(
+    new URL(`../public/og-${fingerprint}.png`, import.meta.url),
+  );
+  const imageUrl = `https://outcharity.com/og-${fingerprint}.png`;
+  const imageAlt = 'Outcharity — Advertise by giving. More given equals higher rank.';
+  const assetHeaders = readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
+
+  assert.deepEqual(fingerprintedImage, sourceImage);
+  assert.equal(fingerprintedImage.readUInt32BE(16), 1200);
+  assert.equal(fingerprintedImage.readUInt32BE(20), 630);
+  assert.ok(document.includes(`<meta property="og:image" content="${imageUrl}" />`));
+  assert.ok(document.includes(`<meta property="og:image:secure_url" content="${imageUrl}" />`));
+  assert.ok(document.includes('<meta property="og:image:type" content="image/png" />'));
+  assert.ok(document.includes('<meta property="og:image:width" content="1200" />'));
+  assert.ok(document.includes('<meta property="og:image:height" content="630" />'));
+  assert.ok(document.includes(`<meta property="og:image:alt" content="${imageAlt}" />`));
+  assert.ok(document.includes(`<meta name="twitter:image" content="${imageUrl}" />`));
+  assert.ok(document.includes(`<meta name="twitter:image:alt" content="${imageAlt}" />`));
+  assert.doesNotMatch(document, /content="https:\/\/outcharity\.com\/og\.png"/);
+  assert.match(
+    assetHeaders,
+    new RegExp(
+      `https://outcharity\\.com/og-${fingerprint}\\.png\\n  Cache-Control: public, max-age=31536000, immutable`,
+    ),
+  );
 });
 
 test('Turnstile is rendered only on the two approved checkout surfaces', () => {
@@ -1030,7 +1074,7 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   assert.equal(response.status, 200);
   assert.equal(
     response.headers.get('Cache-Control'),
-    'public, max-age=5, s-maxage=5, must-revalidate',
+    'public, no-cache, max-age=0, must-revalidate',
   );
   assert.equal(prepareCalls, 1);
   assert.match(document, /Total paid[\s\S]*?\$12\.34/);

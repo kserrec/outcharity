@@ -433,6 +433,62 @@ test('invalid checkout proofs cannot consume the shared checkout brake', async (
   ]);
 });
 
+test('homepage share URLs revalidate downstream while sharing one five-second edge entry', async (context) => {
+  const originalCaches = globalThis.caches;
+  const entries = new Map();
+  Object.defineProperty(globalThis, 'caches', {
+    configurable: true,
+    value: {
+      default: {
+        async match(request) {
+          return entries.get(request.url)?.clone();
+        },
+        async put(request, response) {
+          entries.set(request.url, response.clone());
+        },
+      },
+    },
+  });
+  context.after(() => {
+    Object.defineProperty(globalThis, 'caches', {
+      configurable: true,
+      value: originalCaches,
+    });
+  });
+
+  const limiterKeys = [];
+  const environment = launchEnvironment({
+    DB: null,
+    LOOKUP_RATE_LIMITER: {
+      async limit({ key }) {
+        limiterKeys.push(key);
+        return { success: true };
+      },
+    },
+  });
+
+  for (const url of [
+    'https://outcharity.com/?share=give-and-grow-20260825',
+    'https://outcharity.com/',
+  ]) {
+    const response = await app.fetch(new Request(url), environment, executionContext);
+    const document = await response.text();
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get('Cache-Control'),
+      'public, no-cache, max-age=0, must-revalidate',
+    );
+    assert.match(document, /content="https:\/\/outcharity\.com\/og-3ed4f5f4\.png"/);
+  }
+
+  assert.deepEqual(limiterKeys, ['lookup:all']);
+  assert.deepEqual([...entries.keys()], ['https://outcharity.com/']);
+  assert.equal(
+    entries.get('https://outcharity.com/').headers.get('Cache-Control'),
+    'public, max-age=5, s-maxage=5, must-revalidate',
+  );
+});
+
 test('stats query variations share one cache entry and one database read', async (context) => {
   const originalCaches = globalThis.caches;
   const entries = new Map();
@@ -486,13 +542,17 @@ test('stats query variations share one cache entry and one database read', async
     assert.equal(response.status, 200);
     assert.equal(
       response.headers.get('Cache-Control'),
-      'public, max-age=5, s-maxage=5, must-revalidate',
+      'public, no-cache, max-age=0, must-revalidate',
     );
   }
 
   assert.equal(databaseReads, 1);
   assert.deepEqual(limiterKeys, ['lookup:all']);
   assert.deepEqual([...entries.keys()], ['https://outcharity.com/stats']);
+  assert.equal(
+    entries.get('https://outcharity.com/stats').headers.get('Cache-Control'),
+    'public, max-age=5, s-maxage=5, must-revalidate',
+  );
 });
 
 test('the public health endpoint performs no database work', async () => {

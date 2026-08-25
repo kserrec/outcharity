@@ -660,3 +660,37 @@ surfaces.
 
 Exit: Production uses a bright, unmistakably different warm palette without changing its
 typography, layout, content, payment behavior, or production configuration.
+
+## Phase 14 — Social-preview cache freshness
+
+- [x] Verify the exact live starting state before editing.
+  - A `Twitterbot/1.0` request received the current homepage and current 34,021-byte preview image,
+    and the image ETag matched the deployed bytes; robots rules did not block the crawler.
+  - Every social tag still named the unchanged `https://outcharity.com/og.png` URL. Cloudflare
+    returned the homepage with its default four-hour downstream `max-age` even though the Worker
+    stored public data for only five seconds. Because the live origin was already current while X
+    displayed the former card, the remaining old card was X's independent stored copy and could
+    not be deleted by an origin cache purge.
+- [x] Give the current 1200 × 630 preview a content-fingerprinted
+  `og-3ed4f5f4.png` URL while retaining `/og.png` for compatibility. Declare the image's secure
+  URL, PNG type, dimensions, and descriptive alternative text in both Open Graph and X metadata,
+  and cache the fingerprinted bytes immutably because that URL will never change content.
+- [x] Preserve the Worker's five-second homepage and stats cache entries while making every
+  returned copy of those HTML pages require downstream revalidation. Keep query variations on the
+  same internal cache key so a one-off share URL can bypass an external social-card cache without
+  multiplying D1 reads.
+- [x] Add regression coverage and complete local verification.
+  - Focused tests prove the filename matches the first eight characters of the image's SHA-256,
+    the fingerprinted bytes and dimensions match the approved preview, all structured metadata is
+    present, the asset is immutable, and homepage query variations retain one five-second internal
+    cache entry while returning revalidating client headers.
+  - All 96 tests, JavaScript syntax checking, diff checking, and the dotenv-isolated production dry
+    build pass. The build contains seven static assets and is 856.88 KiB raw / 123.23 KiB
+    compressed.
+- [ ] Commit and push the cache-freshness release, deploy it to the production custom domain, and
+  verify the base URL, cache-busted share URL, fingerprinted image, metadata, cache headers, asset
+  hashes, health response, and current deployment without creating a Checkout Session or payment.
+
+Exit: New social scrapes use content-addressed preview bytes, public HTML cannot be reused without
+revalidation, and Outcharity has a fresh share URL for platforms whose independent cache still
+holds the former base-URL card.

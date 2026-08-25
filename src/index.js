@@ -37,6 +37,7 @@ import {
   publicStatsCacheKey,
   readFormDataWithinLimit,
   readTextWithinLimit,
+  revalidatingPublicResponse,
   requireRateLimit,
   requireSharedRateLimit,
   requireSameOrigin,
@@ -235,7 +236,7 @@ app.get('/', async (context) => {
   const cacheKey = publicCacheKey(context.req.raw);
   if (cache) {
     const cached = await cache.match(cacheKey);
-    if (cached) return cached;
+    if (cached) return revalidatingPublicResponse(cached);
   }
 
   await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'lookup');
@@ -259,7 +260,7 @@ app.get('/', async (context) => {
   );
 
   if (cache) context.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
-  return response;
+  return revalidatingPublicResponse(response);
 });
 
 app.get('/submit', (context) => {
@@ -605,7 +606,7 @@ app.get('/stats', async (context) => {
   const cacheKey = publicStatsCacheKey(context.req.raw);
   if (cache) {
     const cached = await cache.match(cacheKey);
-    if (cached) return cached;
+    if (cached) return revalidatingPublicResponse(cached);
   }
 
   await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'lookup');
@@ -630,7 +631,7 @@ app.get('/stats', async (context) => {
     'public, max-age=5, s-maxage=5, must-revalidate',
   );
   if (cache) context.executionCtx.waitUntil(cache.put(cacheKey, response.clone()));
-  return response;
+  return revalidatingPublicResponse(response);
 });
 app.get('/terms', (context) => htmlResponse(context, termsPage(configFor(context))));
 app.get('/privacy', (context) => htmlResponse(context, privacyPage(configFor(context))));

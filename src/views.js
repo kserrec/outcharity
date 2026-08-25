@@ -3,6 +3,9 @@ import { amountInputValue, displayHost, formatMoney } from './domain.js';
 
 const SITE_DESCRIPTION =
   'Businesses compete for the top spot by giving to charity. Rank is determined by confirmed lifetime contributions.';
+const SOCIAL_PREVIEW_IMAGE_PATH = '/og-3ed4f5f4.png';
+const SOCIAL_PREVIEW_IMAGE_ALT =
+  'Outcharity — Advertise by giving. More given equals higher rank.';
 
 function page(
   config,
@@ -17,7 +20,7 @@ function page(
 ) {
   const fullTitle = title === 'Outcharity' ? 'Outcharity — Advertise by Giving' : `${title} — Outcharity`;
   const canonical = `${config.siteUrl}${path === '/' ? '' : path}`;
-  const previewImage = `${config.siteUrl}/og.png`;
+  const previewImage = `${config.siteUrl}${SOCIAL_PREVIEW_IMAGE_PATH}`;
 
   return html`<!doctype html>
     <html lang="en">
@@ -37,10 +40,16 @@ function page(
         <meta property="og:description" content="${description}" />
         ${privatePage ? '' : html`<meta property="og:url" content="${canonical}" />`}
         <meta property="og:image" content="${previewImage}" />
+        <meta property="og:image:secure_url" content="${previewImage}" />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="${SOCIAL_PREVIEW_IMAGE_ALT}" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="${fullTitle}" />
         <meta name="twitter:description" content="${description}" />
         <meta name="twitter:image" content="${previewImage}" />
+        <meta name="twitter:image:alt" content="${SOCIAL_PREVIEW_IMAGE_ALT}" />
         ${turnstile
           ? html`<script
               src="https://challenges.cloudflare.com/turnstile/v0/api.js"
