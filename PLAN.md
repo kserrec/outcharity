@@ -646,7 +646,17 @@ surfaces.
   - All 16 tested normal-text color pairs meet WCAG AA contrast. The lowest ratio is 4.68:1 for
     deep-teal text on the raspberry action color.
   - The final social preview was visually inspected at its original 1200 × 630 dimensions.
+- [x] Commit and push the palette release, deploy it to the production custom domain, and complete
+  read-only smoke checks without creating a Checkout Session or payment.
+  - Source commit `91847b9` is on `origin/main`. Worker version
+    `b8cc41f5-95b3-4918-b215-d945bb543037` receives 100% of production traffic; version
+    `dbab1369-88e8-4010-876f-3e0d1b9e9bfc` is the immediate rollback target.
+  - Live homepage, health, stylesheet, favicon, and social-preview GETs return `200`; health reports
+    checkout enabled, and the live stylesheet publishes the exact teal, cream, raspberry, and gold
+    tokens. All three deployed asset hashes match the committed files.
+  - A 1440 × 1000 production browser render confirms the brighter palette on the allocation banner,
+    navigation, hero, action card, and leaderboard without changing the approved typography or
+    layout.
 
-Exit: The local site uses a bright, unmistakably different warm palette without changing its
-typography, layout, content, payment behavior, or production configuration. Production deployment
-remains a separate explicit action.
+Exit: Production uses a bright, unmistakably different warm palette without changing its
+typography, layout, content, payment behavior, or production configuration.
