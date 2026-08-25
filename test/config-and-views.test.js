@@ -769,7 +769,8 @@ test('homepage leads with the charity allocation on desktop and mobile', () => {
   assert.ok(statsIndex < headerIndex && headerIndex < mainIndex);
   assert.match(banner, /Each new checkout sends <strong>95%<\/strong> of its contribution to/);
   assert.match(banner, /href="https:\/\/www\.stjude\.org"/);
-  assert.match(banner, />St Jude Childrens Research Hospital<\/a>/);
+  assert.match(banner, />St Jude Children&#39;s Research Hospital<\/a>/);
+  assert.doesNotMatch(banner, /Childrens/);
   assert.match(banner, /aria-label="Charity allocation"/);
 
   const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');

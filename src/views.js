@@ -96,10 +96,17 @@ function homeStat(value, label) {
 function homeAllocationBanner(config) {
   if (!config.publicCampaign) return '';
 
+  // GoodAPI's directory record omits the apostrophe. Keep that exact value for payment and
+  // donation metadata while correcting the charity's name in the public banner.
+  const headerCharityName =
+    config.charityName === 'St Jude Childrens Research Hospital'
+      ? "St Jude Children's Research Hospital"
+      : config.charityName;
+
   return html`<aside class="home-allocation-banner" aria-label="Charity allocation">
     <p class="shell">
       Each new checkout sends <strong>${config.charityPercentage}%</strong> of its contribution to
-      <a href="${config.charityUrl}" target="_blank" rel="noopener">${config.charityName}</a>.
+      <a href="${config.charityUrl}" target="_blank" rel="noopener">${headerCharityName}</a>.
     </p>
   </aside>`;
 }
