@@ -687,9 +687,22 @@ typography, layout, content, payment behavior, or production configuration.
   - All 96 tests, JavaScript syntax checking, diff checking, and the dotenv-isolated production dry
     build pass. The build contains seven static assets and is 856.88 KiB raw / 123.23 KiB
     compressed.
-- [ ] Commit and push the cache-freshness release, deploy it to the production custom domain, and
+- [x] Commit and push the cache-freshness release, deploy it to the production custom domain, and
   verify the base URL, cache-busted share URL, fingerprinted image, metadata, cache headers, asset
   hashes, health response, and current deployment without creating a Checkout Session or payment.
+  - Source commit `1d3cf6e` is on `origin/main`. Worker version
+    `a13724d6-f733-4442-ad94-93986e7d51f0` receives 100% of production traffic; version
+    `b8cc41f5-95b3-4918-b215-d945bb543037` is the immediate rollback target.
+  - Live `Twitterbot/1.0` requests to the base homepage and
+    `/?share=give-and-grow-20260825` return `200` with
+    `Cache-Control: public, no-cache, max-age=0, must-revalidate`. The share URL returns a
+    Cloudflare cache hit while retaining that downstream policy, proving the five-second internal
+    cache still works.
+  - Both live pages publish the fingerprinted URL and complete Open Graph/X image metadata. The
+    new asset returns `200`, `image/png`, 34,021 bytes, and
+    `Cache-Control: public, max-age=31536000, immutable`; its deployed SHA-256 is exactly
+    `3ed4f5f4ae42171c6bdcc2291ddb5c831e28372c6a06586e37e34188f8893f62`. Health still reports
+    checkout enabled.
 
 Exit: New social scrapes use content-addressed preview bytes, public HTML cannot be reused without
 revalidation, and Outcharity has a fresh share URL for platforms whose independent cache still
