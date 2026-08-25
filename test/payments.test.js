@@ -16,8 +16,8 @@ import {
 
 const advertiserId = '11111111-1111-4111-8111-111111111111';
 const config = {
-  charityPercentage: 90,
-  platformPercentage: 10,
+  charityPercentage: 95,
+  platformPercentage: 5,
   charityName: 'Example Charity',
   charityEin: '12-3456789',
 };
@@ -53,13 +53,28 @@ function paidSession(overrides = {}) {
 test('a confirmed Checkout Session becomes an exact integer-cent contribution', () => {
   const contribution = contributionFromCheckoutSession(paidSession());
   assert.equal(contribution.grossCents, 1_001);
-  assert.equal(contribution.charityCents, 901);
-  assert.equal(contribution.platformCents, 100);
+  assert.equal(contribution.charityCents, 951);
+  assert.equal(contribution.platformCents, 50);
   assert.equal(contribution.charityName, 'Example Charity');
   assert.equal(contribution.charityEin, '12-3456789');
   assert.equal(contribution.stripeCheckoutSessionId, 'cs_test_1234567890');
   assert.equal(contribution.stripePaymentIntentId, 'pi_1234567890');
   assert.equal(contribution.advertiser.id, advertiserId);
+});
+
+test('a Checkout Session created under the former split keeps its recorded allocation', () => {
+  const session = paidSession();
+  session.metadata = {
+    ...session.metadata,
+    charity_percentage: '90',
+    platform_percentage: '10',
+  };
+
+  const contribution = contributionFromCheckoutSession(session);
+  assert.equal(contribution.charityCents, 901);
+  assert.equal(contribution.platformCents, 100);
+  assert.equal(contribution.charityPercentage, 90);
+  assert.equal(contribution.platformPercentage, 10);
 });
 
 test('an existing advertiser Checkout Session remains a cumulative contribution', () => {
@@ -79,8 +94,8 @@ test('an existing advertiser Checkout Session remains a cumulative contribution'
   assert.equal(contribution.advertiserId, advertiserId);
   assert.equal(contribution.advertiser, null);
   assert.equal(contribution.grossCents, 2_500);
-  assert.equal(contribution.charityCents, 2_250);
-  assert.equal(contribution.platformCents, 250);
+  assert.equal(contribution.charityCents, 2_375);
+  assert.equal(contribution.platformCents, 125);
 });
 
 test('an unpaid or amount-mismatched Checkout Session cannot become a contribution', () => {
@@ -117,7 +132,7 @@ test('Stripe Checkout charges the exact requested cents and preserves fulfillmen
     advertiserId,
     amountCents: 1_001,
     charityName: 'Example Charity',
-    charityPercentage: 90,
+    charityPercentage: 95,
     successUrl: 'https://outcharity.com/success?session_id={CHECKOUT_SESSION_ID}',
     cancelUrl: 'https://outcharity.com/manage/token',
     metadata,

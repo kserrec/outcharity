@@ -14,7 +14,8 @@ Outcharity is a public advertising leaderboard where rank is determined by confi
 
 The browser receives ordinary HTML and CSS. Application-owned JavaScript is limited to amount
 shortcuts and copy/share controls; Cloudflare automatically injects its existing Web Analytics
-measurement script for non-European visits.
+measurement script for non-European visits. The visual system uses local system-font stacks, so no
+third-party font service or font download is added to the page.
 
 The public `/stats` page reads one current D1 statement for total paid, the currently counted
 charity allocation, counted payments, visible advertisers, average payment, Cloudflare-recorded
@@ -53,11 +54,17 @@ both Cloudflare rate-limit bindings, the Turnstile site key, encrypted Turnstile
 hostname allowlist, the canonical production origin, and `OUTCHARITY_LAUNCH_APPROVED=true` are
 present. This prevents an unfinished, unprotected, or unapproved campaign from accepting money.
 
-Version 1 is locked to a 90% charity allocation and a 10% platform allocation. A conflicting runtime value keeps checkout closed and cannot change the public promise. Fractional cents are rounded in the charity's favor. Outcharity absorbs payment-processing fees rather than subtracting them from the charity amount.
+New version 1 Checkout Sessions are locked to a 95% charity allocation and a 5% platform
+allocation. A conflicting runtime value keeps checkout closed and cannot change the public
+promise. Fractional cents are rounded in the charity's favor. Outcharity absorbs payment-processing
+fees rather than subtracting them from the charity amount. Earlier open sessions and existing
+immutable contribution rows retain the allocation recorded when checkout began, including the
+original 90/10 split; public copy and aggregate-stat explanations distinguish those amounts from
+the current split.
 
-The public wording comes from the standalone-model approval received from GoodAPI's founder.
-`GOODAPI_EMAIL.txt` preserves the exact request, and `PLAN.md` records the approval and verified
-production configuration.
+GoodAPI's founder approved the standalone advertising model. `GOODAPI_EMAIL.txt` preserves the
+exact original request—including its initial 90/10 split—and `PLAN.md` records that approval, the
+verified production history, and the later 95/5 change.
 
 ## Local verification
 

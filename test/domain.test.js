@@ -27,14 +27,14 @@ function listingForm(overrides = {}) {
   return form;
 }
 
-test('90/10 allocation uses integer cents and favors the charity on rounding', () => {
-  assert.deepEqual(allocateCents(100_000, 90), {
-    charityCents: 90_000,
-    platformCents: 10_000,
+test('95/5 allocation uses integer cents and favors the charity on rounding', () => {
+  assert.deepEqual(allocateCents(100_000, 95), {
+    charityCents: 95_000,
+    platformCents: 5_000,
   });
-  assert.deepEqual(allocateCents(1_001, 90), {
-    charityCents: 901,
-    platformCents: 100,
+  assert.deepEqual(allocateCents(1_001, 95), {
+    charityCents: 951,
+    platformCents: 50,
   });
   assert.equal(formatMoney(1_001), '$10.01');
 });

@@ -28,8 +28,10 @@ test('production configuration pins the approved live campaign', () => {
   assert.equal(deployment.vars.CHARITY_EIN, '620646012');
   assert.equal(
     deployment.vars.CAMPAIGN_HEADLINE,
-    'Buy Clout. Do good.',
+    'Give and Grow.',
   );
+  assert.equal(deployment.vars.CHARITY_PERCENTAGE, '95');
+  assert.equal(deployment.vars.PLATFORM_PERCENTAGE, '5');
   assert.equal(deployment.vars.MIN_CONTRIBUTION_CENTS, '100');
   assert.equal(deployment.vars.MAX_CONTRIBUTION_CENTS, '10000000');
   assert.equal(deployment.vars.CHARITY_HOLD_DAYS, '30');
@@ -37,7 +39,7 @@ test('production configuration pins the approved live campaign', () => {
   assert.equal(deployment.vars.TURNSTILE_HOSTNAMES, 'outcharity.com');
   assert.equal(
     deployment.vars.CHARITY_DISCLOSURE,
-    'Outcharity is not affiliated with or endorsed by St. Jude Children’s Research Hospital. Each payment purchases advertising and is not represented as a tax-deductible charitable gift by the advertiser. Of each gross payment, 90% is directed to St Jude Childrens Research Hospital through GoodAPI and 10% supports Outcharity. Outcharity separately absorbs payment-processing fees; those fees do not reduce the 90% charity allocation.',
+    'Outcharity is not affiliated with or endorsed by St. Jude Children’s Research Hospital. Each payment purchases advertising and is not represented as a tax-deductible charitable gift by the advertiser. Checkout sessions created under the current allocation direct 95% of each gross payment to St Jude Childrens Research Hospital through GoodAPI, and 5% supports Outcharity. Earlier sessions and completed payments retain the allocation recorded when checkout began. Outcharity separately absorbs payment-processing fees; those fees do not reduce the recorded charity allocation.',
   );
 });
 
@@ -49,7 +51,7 @@ test('the default contribution starts at the one-dollar minimum', () => {
   const document = String(submitPage(config));
 
   assert.equal(config.minimumCents, 100);
-  assert.equal(config.campaignHeadline, 'Buy Clout. Do good.');
+  assert.equal(config.campaignHeadline, 'Give and Grow.');
   assert.match(document, /data-amount="1"/);
   assert.match(document, /name="amount"\s+value="1"/);
   assert.match(document, /Minimum \$1\./);
@@ -118,6 +120,10 @@ test('terms publish the approved refund and dispute promises', () => {
   assert.match(document, /applicable\s+card-network process/);
   assert.match(document, /Nothing in these Terms limits rights that cannot legally be waived/);
   assert.doesNotMatch(document, /Final refund, chargeback/);
+  assert.match(document, /Each payment uses the allocation recorded when its Stripe Checkout Session is created/);
+  assert.match(document, /Under the current allocation,\s+95% of each gross payment goes to/);
+  assert.match(document, /5% supports Outcharity/);
+  assert.match(document, /Earlier sessions\s+and completed payments retain their recorded allocation/);
 });
 
 test('checkout cannot open without explicit approval and every required integration', () => {
@@ -164,13 +170,14 @@ test('checkout cannot open without explicit approval and every required integrat
     assert.equal(getConfig(mismatched, mismatched.SITE_URL).checkoutEnabled, false, hostnames);
   }
 
-  const wrongAllocation = completeEnvironment();
-  wrongAllocation.CHARITY_PERCENTAGE = '95';
-  wrongAllocation.PLATFORM_PERCENTAGE = '5';
-  const lockedConfig = getConfig(wrongAllocation, wrongAllocation.SITE_URL);
+  const formerAllocation = completeEnvironment();
+  formerAllocation.CHARITY_PERCENTAGE = '90';
+  formerAllocation.PLATFORM_PERCENTAGE = '10';
+  const lockedConfig = getConfig(formerAllocation, formerAllocation.SITE_URL);
   assert.equal(lockedConfig.checkoutEnabled, false);
-  assert.equal(lockedConfig.charityPercentage, 90);
-  assert.equal(lockedConfig.platformPercentage, 10);
+  assert.equal(lockedConfig.charityPercentage, 95);
+  assert.equal(lockedConfig.platformPercentage, 5);
+  assert.match(lockedConfig.issues.join(' '), /locked to the approved 95\/5 allocation/);
 
   const missingProductionOrigin = completeEnvironment();
   delete missingProductionOrigin.SITE_URL;
@@ -314,6 +321,8 @@ test('the new-listing route sends validated cents and matching fulfillment data 
   assert.equal(stripeBody.get('metadata[url]'), 'https://example.com/');
   assert.equal(stripeBody.get('metadata[charity_name]'), 'Example Charity');
   assert.equal(stripeBody.get('metadata[charity_ein]'), '12-3456789');
+  assert.equal(stripeBody.get('metadata[charity_percentage]'), '95');
+  assert.equal(stripeBody.get('metadata[platform_percentage]'), '5');
   assert.equal(
     stripeBody.get('client_reference_id'),
     stripeBody.get('metadata[advertiser_id]'),
@@ -714,7 +723,7 @@ test('homepage leads with the charity allocation on desktop and mobile', () => {
 
   assert.ok(bannerIndex >= 0 && bannerIndex < statsIndex);
   assert.ok(statsIndex < headerIndex && headerIndex < mainIndex);
-  assert.match(banner, /<strong>90%<\/strong> of every contribution goes to/);
+  assert.match(banner, /Each new checkout sends <strong>95%<\/strong> of its contribution to/);
   assert.match(banner, /href="https:\/\/www\.stjude\.org"/);
   assert.match(banner, />St Jude Childrens Research Hospital<\/a>/);
   assert.match(banner, /aria-label="Charity allocation"/);
@@ -753,8 +762,9 @@ test('mobile homepage leaves only the CTA visible in the unframed campaign statu
   const mobileStatsLink =
     mobileStyles.match(/\.campaign-stats-link\s*\{([^}]*)\}/)?.[1] || '';
 
-  assert.match(document, /The remaining 10% keeps Outcharity running\./);
-  assert.doesNotMatch(document, /The remaining 10% supports Outcharity\./);
+  assert.match(document, /The remaining 5% keeps Outcharity running\./);
+  assert.doesNotMatch(document, /The remaining 5% supports Outcharity\./);
+  assert.match(document, /Earlier checkout sessions and completed contributions retain\s+the allocation recorded when checkout began\./);
   assert.match(desktopStatus, /border:\s*1px solid var\(--ink\)/);
   assert.match(desktopStatus, /border-radius:\s*14px/);
   assert.match(desktopStatus, /background:\s*var\(--card\)/);
@@ -868,6 +878,8 @@ test('the stats page defines campaign aggregates and an exact charity-delivery l
   assert.match(document, /Refunded or\s+disputed payments are excluded/);
   assert.match(document, /individual transactions or visits are not published/);
   assert.match(document, /Repeat payments count separately/);
+  assert.match(document, /Checkout sessions created under the current allocation use 95%/);
+  assert.match(document, /earlier sessions and payments retain their recorded allocation/);
   assert.match(document, /Fractional cents round in the charity&#39;s favor/);
   assert.match(document, /rounded to the nearest cent/);
   assert.match(document, /not unique people/);
@@ -1041,7 +1053,7 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   assert.equal(prepareCalls, 1, 'the sitemap must not query D1');
 });
 
-test('the visual refresh preserves the palette and compacts mobile leaderboard entries', () => {
+test('the warm visual system preserves its palette, typography, and compact mobile entries', () => {
   const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
   const mobileStart = styles.indexOf('@media (max-width: 760px)');
   const mobileEnd = styles.indexOf('@media (max-width: 350px)');
@@ -1058,17 +1070,20 @@ test('the visual refresh preserves the palette and compacts mobile leaderboard e
     mobileStyles.match(/\.leader-runners \.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
 
   for (const token of [
-    '--ink: #11110f',
-    '--paper: #f6f4ed',
-    '--card: #fffef9',
-    '--signal: #ff5c35',
-    '--signal-dark: #cf3210',
-    '--sun: #ffd84d',
-    '--warm: #fff0e9',
-    '--muted: #68665f',
-    '--line: #c9c5b9',
-    '--success: #166534',
-    '--error: #a51d14',
+    '--ink: #292421',
+    '--paper: #f6f0e7',
+    '--card: #fffbf5',
+    '--signal: #c97d66',
+    '--signal-dark: #854535',
+    '--sun: #e5d4ad',
+    '--warm: #f1ded3',
+    '--muted: #6a605a',
+    '--line: #cbbeb1',
+    '--success: #3f6850',
+    '--error: #9a4138',
+    '--focus: #2c668f',
+    '--font-body: "Avenir Next", Avenir, "Segoe UI", ui-sans-serif, system-ui, sans-serif',
+    '--font-display: Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, ui-serif, serif',
   ]) {
     assert.match(root, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }

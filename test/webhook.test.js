@@ -15,8 +15,8 @@ const stripe = createStripeClient('sk_test_placeholder');
 
 function session(paymentStatus = 'paid') {
   const allocation = {
-    charityPercentage: 90,
-    platformPercentage: 10,
+    charityPercentage: 95,
+    platformPercentage: 5,
     charityName: 'Example Charity',
     charityEin: '12-3456789',
   };
@@ -202,10 +202,10 @@ test('the signed webhook counts a paid session once and an unpaid session zero t
     .first();
   assert.equal(count.count, 1);
   assert.deepEqual({ ...contribution }, {
-    charity_amount_cents: 900,
-    platform_amount_cents: 100,
-    charity_percentage: 90,
-    platform_percentage: 10,
+    charity_amount_cents: 950,
+    platform_amount_cents: 50,
+    charity_percentage: 95,
+    platform_percentage: 5,
   });
   assert.equal(advertiser.total_contributed_cents, 1_000);
   // The charity share is held, not sent at confirmation time.
@@ -747,7 +747,7 @@ test('public totals exclude refunded or disputed payments while the immutable ro
   const after = await app.request('http://localhost/', {}, env, { waitUntil() {} });
   const html = await after.text();
   assert.match(html, /<strong>\$50<\/strong>\s*<span>confirmed giving/);
-  assert.match(html, /<strong>\$45<\/strong> to charity/);
+  assert.match(html, /<strong>\$47\.50<\/strong> to charity/);
   assert.doesNotMatch(html, /Webhook Company/);
   assert.match(html, /Other Company/);
   const rows = await db.prepare('SELECT COUNT(*) AS count FROM contributions').first();

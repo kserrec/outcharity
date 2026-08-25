@@ -1,8 +1,8 @@
 import { isLocalHostname } from './http.js';
 
 const DEFAULT_SITE_URL = 'http://localhost:8787';
-const V1_CHARITY_PERCENTAGE = 90;
-const V1_PLATFORM_PERCENTAGE = 10;
+const V1_CHARITY_PERCENTAGE = 95;
+const V1_PLATFORM_PERCENTAGE = 5;
 const STRIPE_MINIMUM_USD_CENTS = 50;
 const STRIPE_MAXIMUM_USD_CENTS = 99_999_999;
 const DEFAULT_CHARITY_HOLD_DAYS = 30;
@@ -161,7 +161,7 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     configuredCharityPercentage !== V1_CHARITY_PERCENTAGE ||
     configuredPlatformPercentage !== V1_PLATFORM_PERCENTAGE
   ) {
-    issues.push('Outcharity v1 is locked to the approved 90/10 allocation.');
+    issues.push('Outcharity v1 is locked to the approved 95/5 allocation.');
   }
   if (minimumCents < 1 || maximumCents < minimumCents) {
     issues.push('The contribution limits are invalid.');
@@ -180,9 +180,7 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
   });
   const charityEin = String(env.CHARITY_EIN || '').trim();
   const charityDisclosure = String(env.CHARITY_DISCLOSURE || '').trim();
-  const campaignHeadline = String(
-    env.CAMPAIGN_HEADLINE || 'Buy Clout. Do good.',
-  ).trim();
+  const campaignHeadline = String(env.CAMPAIGN_HEADLINE || 'Give and Grow.').trim();
 
   const campaignIssues = [];
   if (!charityName || charityName.length > 120) {

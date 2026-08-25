@@ -1,17 +1,32 @@
 :root {
   color-scheme: light;
-  --ink: #11110f;
-  --paper: #f6f4ed;
-  --card: #fffef9;
-  --signal: #ff5c35;
-  --signal-dark: #cf3210;
-  --sun: #ffd84d;
-  --warm: #fff0e9;
-  --muted: #68665f;
-  --line: #c9c5b9;
-  --success: #166534;
-  --error: #a51d14;
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ink: #292421;
+  --paper: #f6f0e7;
+  --card: #fffbf5;
+  --card-hover: #fffdf9;
+  --white: #ffffff;
+  --signal: #c97d66;
+  --signal-dark: #854535;
+  --signal-hover: #d7927d;
+  --sun: #e5d4ad;
+  --sun-soft: #f3e7ca;
+  --sun-hover: #eedcb5;
+  --warm: #f1ded3;
+  --warm-hover: #ecd3c7;
+  --muted: #6a605a;
+  --line: #cbbeb1;
+  --shadow: #d9cec2;
+  --shadow-strong: #c5b8ab;
+  --neutral: #ece5dc;
+  --highlight: #e2c88e;
+  --success: #3f6850;
+  --success-soft: #e5eee7;
+  --error: #9a4138;
+  --error-soft: #f4e2de;
+  --focus: #2c668f;
+  --font-body: "Avenir Next", Avenir, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, ui-serif, serif;
+  font-family: var(--font-body);
   font-synthesis: none;
 }
 
@@ -34,6 +49,23 @@ body {
   line-height: 1.45;
 }
 
+.wordmark,
+.campaign-copy h1,
+.board-heading h2,
+.listing-copy h2,
+.empty-board strong,
+.recent-activity-heading h3,
+.page-main h1,
+.delivery-ledger-heading h2,
+.help-card h2,
+.help-trust-note h2,
+.closed-panel h2,
+.manage-page > h2,
+.prose h2,
+.prose blockquote {
+  font-family: var(--font-display);
+}
+
 a {
   color: inherit;
   text-underline-offset: 0.18em;
@@ -52,7 +84,7 @@ a {
 }
 
 :focus-visible {
-  outline: 4px solid #1565d8;
+  outline: 4px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -69,8 +101,8 @@ a {
 .wordmark {
   display: inline-block;
   font-size: 1.5rem;
-  font-weight: 900;
-  letter-spacing: -0.045em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   line-height: 1;
   text-decoration: none;
 }
@@ -201,9 +233,9 @@ a {
   max-width: 790px;
   margin: 0;
   font-size: clamp(3.3rem, 7vw, 6.65rem);
-  font-weight: 900;
-  letter-spacing: -0.065em;
-  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
 }
 
 .campaign-deck {
@@ -313,7 +345,7 @@ a {
 }
 
 .button-primary:hover {
-  background: #ff7554;
+  background: var(--signal-hover);
 }
 
 .button-secondary {
@@ -321,12 +353,12 @@ a {
 }
 
 .button-secondary:hover {
-  background: #fff;
+  background: var(--white);
 }
 
 .button-disabled {
   border-color: var(--line);
-  background: #e7e4db;
+  background: var(--neutral);
   color: var(--muted);
   box-shadow: none;
   cursor: default;
@@ -360,7 +392,7 @@ a {
 .board-heading h2 {
   margin: 0;
   font-size: clamp(2rem, 4vw, 3.8rem);
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
   line-height: 1;
 }
 
@@ -406,7 +438,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--card);
-  box-shadow: 2px 3px 0 #ded9cb;
+  box-shadow: 2px 3px 0 var(--shadow);
   cursor: pointer;
   transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
@@ -415,23 +447,23 @@ a {
   grid-template-columns: 84px 96px minmax(200px, 1fr) minmax(185px, auto);
   min-height: 185px;
   border: 2px solid var(--ink);
-  background: linear-gradient(120deg, #fff8cc 0%, var(--warm) 100%);
+  background: linear-gradient(120deg, var(--sun-soft) 0%, var(--warm) 100%);
   box-shadow: 5px 5px 0 var(--signal);
 }
 
 .listing-card:hover {
-  background: #fff;
-  box-shadow: 3px 4px 0 #cbc5b6;
+  background: var(--card-hover);
+  box-shadow: 3px 4px 0 var(--shadow-strong);
   transform: translate(-1px, -1px);
 }
 
 .listing-card-first:hover {
-  background: linear-gradient(120deg, #fff2a5 0%, #ffe1d5 100%);
+  background: linear-gradient(120deg, var(--sun-hover) 0%, var(--warm-hover) 100%);
   box-shadow: 7px 7px 0 var(--signal);
 }
 
 .listing-card:focus-within {
-  outline: 4px solid #1565d8;
+  outline: 4px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -478,7 +510,7 @@ a {
   height: 72px;
   border: 1px solid var(--ink);
   border-radius: 8px;
-  background: #fff;
+  background: var(--white);
   object-fit: contain;
 }
 
@@ -496,7 +528,7 @@ a {
   margin: 0 0 4px;
   overflow-wrap: anywhere;
   font-size: clamp(1.3rem, 2.5vw, 2rem);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.025em;
   line-height: 1.05;
 }
 
@@ -586,7 +618,7 @@ a {
   padding: clamp(28px, 5vw, 54px);
   border: 2px solid var(--ink);
   border-radius: 16px;
-  background: linear-gradient(120deg, #fff8cc 0%, var(--warm) 100%);
+  background: linear-gradient(120deg, var(--sun-soft) 0%, var(--warm) 100%);
   box-shadow: 5px 5px 0 var(--signal);
 }
 
@@ -610,7 +642,7 @@ a {
   display: block;
   max-width: 780px;
   font-size: clamp(1.8rem, 4vw, 3.7rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.035em;
   line-height: 0.98;
 }
 
@@ -626,7 +658,7 @@ a {
   margin-top: 34px;
   padding: 20px 24px;
   border-left: 4px solid var(--signal);
-  background: #eae7dd;
+  background: var(--neutral);
 }
 
 .allocation-panel .allocation {
@@ -702,7 +734,7 @@ a {
   height: 30px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--white);
   object-fit: contain;
 }
 
@@ -743,8 +775,9 @@ a {
 .page-main h1 {
   margin: 0;
   font-size: clamp(2.9rem, 8vw, 6.25rem);
-  letter-spacing: -0.075em;
-  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 0.94;
 }
 
 .page-intro {
@@ -826,7 +859,7 @@ a {
   max-width: 720px;
   margin: 0;
   font-size: clamp(2rem, 4.5vw, 4rem);
-  letter-spacing: -0.055em;
+  letter-spacing: -0.035em;
   line-height: 0.98;
 }
 
@@ -853,7 +886,7 @@ a {
 .delivery-ledger-note {
   padding: 17px 20px;
   border-left: 4px solid var(--success);
-  background: #e8eee5;
+  background: var(--success-soft);
   color: var(--muted);
   font-size: 0.82rem;
 }
@@ -892,7 +925,7 @@ a {
 }
 
 .help-card-featured {
-  background: linear-gradient(135deg, #fff8cc 0%, var(--warm) 100%);
+  background: linear-gradient(135deg, var(--sun-soft) 0%, var(--warm) 100%);
   box-shadow: 4px 4px 0 var(--signal);
 }
 
@@ -908,7 +941,7 @@ a {
 .help-card h2 {
   margin: 0;
   font-size: clamp(1.6rem, 3vw, 2.5rem);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.025em;
   line-height: 1;
 }
 
@@ -935,7 +968,7 @@ a {
   padding: 11px 13px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--white);
   color: var(--signal-dark);
   font-size: 0.86rem;
   font-weight: 850;
@@ -958,7 +991,7 @@ a {
   margin-top: 28px;
   padding: 22px 24px;
   border-left: 5px solid var(--success);
-  background: #e8eee5;
+  background: var(--success-soft);
 }
 
 .help-trust-note h2 {
@@ -1026,7 +1059,7 @@ textarea {
 
 input:focus,
 textarea:focus {
-  background: #fff;
+  background: var(--white);
 }
 
 textarea {
@@ -1070,7 +1103,7 @@ small,
 
 .amount-button:hover,
 .amount-button[aria-pressed='true'] {
-  background: #ffd749;
+  background: var(--highlight);
 }
 
 .amount-buttons > span {
@@ -1114,7 +1147,7 @@ small,
 .error-summary {
   padding: 14px 16px;
   border: 2px solid var(--error);
-  background: #fff0ed;
+  background: var(--error-soft);
   color: var(--error);
   font-weight: 800;
 }
@@ -1122,7 +1155,7 @@ small,
 .checkout-notice {
   padding: 17px 19px;
   border-left: 5px solid var(--signal);
-  background: #ebe8df;
+  background: var(--neutral);
 }
 
 .checkout-notice p {
@@ -1247,8 +1280,8 @@ small,
   padding: 24px 0 24px 24px;
   border-left: 7px solid var(--signal);
   font-size: clamp(1.5rem, 4vw, 2.6rem);
-  font-weight: 900;
-  letter-spacing: -0.05em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   line-height: 1.05;
 }
 

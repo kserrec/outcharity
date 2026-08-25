@@ -586,3 +586,38 @@ Exit: Network floods are handled at Cloudflare's edge, automated checkout abuse 
 before R2 or Stripe work, downstream paid resources have layered cost brakes, and account-level
 limits and notifications reduce denial-of-wallet exposure without claiming an impossible absolute
 guarantee against every charge.
+
+## Phase 12 — “Give and Grow” brand and 95/5 allocation
+
+- [x] Verify the exact starting state before editing: production configuration used “Buy Clout. Do
+  good.”, new payments were hard-locked to 90% charity and 10% platform, the stylesheet used vivid
+  orange and yellow accents with one sans-serif system stack, and the favicon and social preview
+  repeated the orange palette.
+- [x] Change the production headline and fallback to “Give and Grow.” and hard-lock every new
+  Checkout Session to 95% charity and 5% platform, including Stripe metadata, cent allocation,
+  stored contribution fields, and the amount later sent to GoodAPI.
+- [x] Preserve every earlier open Checkout Session and existing immutable contribution row, and
+  describe mixed totals literally: sessions created under the current allocation use 95/5, while
+  earlier sessions and completed payments keep the allocation recorded when checkout began. Keep
+  `GOODAPI_EMAIL.txt` and earlier completed phases unchanged as historical records of the original
+  90/10 launch.
+- [x] Replace the vivid orange system with warm ivory, muted terracotta, sand, blush, cocoa, and
+  restrained green tokens; use a humanist sans-serif system stack for interface copy and a classic
+  serif system stack for editorial headings; recolor the favicon and social preview without adding
+  a font or runtime dependency.
+- [x] Run the focused allocation/view tests, full test suite, syntax check, dry production build,
+  diff check, palette contrast probe, and final source/diff audit.
+  - Focused allocation and view coverage passes, including the test that an earlier 90/10 Checkout
+    Session keeps its recorded split after the current configuration changes to 95/5.
+  - All 94 tests, JavaScript syntax checking, diff checking, and the dotenv-isolated dry production
+    build pass at 855.76 KiB raw / 123.00 KiB compressed.
+  - Headless Chrome renders at 1440, 390, and 320 pixels preserve the hierarchy and show no visible
+    horizontal overflow; the longer transition-safe allocation wording still fits at 320 pixels.
+  - Every tested normal-size text/background pair meets WCAG AA contrast; the lowest measured ratio
+    is 4.83:1 for deep-cocoa text on the terracotta action color.
+  - The final social preview is 1200 × 630 and 33,639 bytes, smaller than the prior 39,564-byte PNG;
+    its exact wording, aspect ratio, and warm three-color system were visually inspected.
+
+Exit: The local release candidate makes the current 95/5 promise exact from Checkout through
+delivery, preserves historical allocations truthfully, and presents the warmer visual identity at
+all public brand surfaces. Production deployment remains a separate explicit action.

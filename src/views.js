@@ -89,7 +89,7 @@ function homeAllocationBanner(config) {
 
   return html`<aside class="home-allocation-banner" aria-label="Charity allocation">
     <p class="shell">
-      <strong>${config.charityPercentage}%</strong> of every contribution goes to
+      Each new checkout sends <strong>${config.charityPercentage}%</strong> of its contribution to
       <a href="${config.charityUrl}" target="_blank" rel="noopener">${config.charityName}</a>.
     </p>
   </aside>`;
@@ -144,10 +144,11 @@ function allocationStatement(config, { compact = false } = {}) {
   }
 
   return html`<p class="${compact ? 'fine-print' : 'allocation'}">
-    <strong>${config.charityPercentage}%</strong> of every contribution goes to
+    Each new checkout sends <strong>${config.charityPercentage}%</strong> of its contribution to
     <a href="${config.charityUrl}" target="_blank" rel="noopener">${config.charityName}</a>.
     The remaining ${config.platformPercentage}% keeps Outcharity running. Payment-processing fees
-    do not reduce the charity amount.
+    do not reduce the charity amount. Earlier checkout sessions and completed contributions retain
+    the allocation recorded when checkout began.
     <span class="required-disclosure">${config.charityDisclosure}</span>
   </p>`;
 }
@@ -326,7 +327,7 @@ export function statsPage(config, stats) {
     statCard(
       'To charity',
       formatMoney(stats.charityCents),
-      `The recorded ${config.charityPercentage}% allocation. Fractional cents round in the charity's favor.`,
+      `Exact recorded charity amounts. Checkout sessions created under the current allocation use ${config.charityPercentage}%; earlier sessions and payments retain their recorded allocation. Fractional cents round in the charity's favor.`,
     ),
     statCard(
       'Payments',
@@ -834,10 +835,12 @@ export function termsPage(config) {
       </p>
       <h2>Allocation</h2>
       <p>
-        ${config.charityPercentage}% of each gross payment is allocated to the featured charity and
-        ${config.platformPercentage}% supports Outcharity. Fractional cents are rounded in the
-        charity's favor. Payment-processing fees are paid from Outcharity's share or absorbed by
-        Outcharity; they do not reduce the stated charity allocation. The charity share is
+        Each payment uses the allocation recorded when its Stripe Checkout Session is created.
+        Under the current allocation, ${config.charityPercentage}% of each gross payment goes to the
+        featured charity and ${config.platformPercentage}% supports Outcharity. Earlier sessions
+        and completed payments retain their recorded allocation. Fractional cents are rounded in
+        the charity's favor. Payment-processing fees are paid from Outcharity's share or absorbed
+        by Outcharity; they do not reduce the stated charity allocation. The charity share is
         delivered to the charity provider after a ${config.charityHoldDays}-day verification
         period following payment; a payment that is refunded or disputed within that period sends
         nothing to the charity.
