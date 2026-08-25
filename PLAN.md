@@ -631,3 +631,22 @@ guarantee against every charge.
 Exit: Production makes the current 95/5 promise exact from Checkout through delivery, preserves
 historical allocations truthfully, and presents the warmer visual identity at all public brand
 surfaces.
+
+## Phase 13 — Brighter color correction
+
+- [x] Preserve the approved typography, layout, copy, and 95/5 behavior; change only the visual
+  color system and its matching brand assets.
+- [x] Replace the rejected muted terracotta, sand, and cocoa palette with deep teal, vivid
+  raspberry, sunny gold, warm cream, and clean white across the stylesheet, favicon, and social
+  preview. Keep the social preview's exact text, composition, and 1200 × 630 dimensions.
+- [x] Update the palette-locking test and run focused and full verification.
+  - The focused visual-system test and all 94 tests pass; JavaScript syntax checking,
+    `git diff --check`, and the dotenv-isolated dry production build pass. The build is 855.76 KiB
+    raw / 123.00 KiB compressed.
+  - All 16 tested normal-text color pairs meet WCAG AA contrast. The lowest ratio is 4.68:1 for
+    deep-teal text on the raspberry action color.
+  - The final social preview was visually inspected at its original 1200 × 630 dimensions.
+
+Exit: The local site uses a bright, unmistakably different warm palette without changing its
+typography, layout, content, payment behavior, or production configuration. Production deployment
+remains a separate explicit action.

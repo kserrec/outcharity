@@ -1053,7 +1053,7 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   assert.equal(prepareCalls, 1, 'the sitemap must not query D1');
 });
 
-test('the warm visual system preserves its palette, typography, and compact mobile entries', () => {
+test('the bright warm visual system preserves its palette, typography, and compact mobile entries', () => {
   const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
   const mobileStart = styles.indexOf('@media (max-width: 760px)');
   const mobileEnd = styles.indexOf('@media (max-width: 350px)');
@@ -1070,18 +1070,18 @@ test('the warm visual system preserves its palette, typography, and compact mobi
     mobileStyles.match(/\.leader-runners \.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
 
   for (const token of [
-    '--ink: #292421',
-    '--paper: #f6f0e7',
-    '--card: #fffbf5',
-    '--signal: #c97d66',
-    '--signal-dark: #854535',
-    '--sun: #e5d4ad',
-    '--warm: #f1ded3',
-    '--muted: #6a605a',
-    '--line: #cbbeb1',
-    '--success: #3f6850',
-    '--error: #9a4138',
-    '--focus: #2c668f',
+    '--ink: #153b3a',
+    '--paper: #fff7e8',
+    '--card: #ffffff',
+    '--signal: #f47a91',
+    '--signal-dark: #9d2748',
+    '--sun: #f3c94f',
+    '--warm: #f9dce5',
+    '--muted: #536663',
+    '--line: #a8bdb8',
+    '--success: #16705a',
+    '--error: #b13e52',
+    '--focus: #1769aa',
     '--font-body: "Avenir Next", Avenir, "Segoe UI", ui-sans-serif, system-ui, sans-serif',
     '--font-display: Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, ui-serif, serif',
   ]) {
