@@ -4,7 +4,17 @@ import { amountInputValue, displayHost, formatMoney } from './domain.js';
 const SITE_DESCRIPTION =
   'Businesses compete for the top spot by giving to charity. Rank is determined by confirmed lifetime contributions.';
 
-function page(config, { title, description = SITE_DESCRIPTION, path = '/', body, privatePage = false }) {
+function page(
+  config,
+  {
+    title,
+    description = SITE_DESCRIPTION,
+    path = '/',
+    body,
+    privatePage = false,
+    turnstile = false,
+  },
+) {
   const fullTitle = title === 'Outcharity' ? 'Outcharity — Advertise by Giving' : `${title} — Outcharity`;
   const canonical = `${config.siteUrl}${path === '/' ? '' : path}`;
   const previewImage = `${config.siteUrl}/og.png`;
@@ -31,6 +41,13 @@ function page(config, { title, description = SITE_DESCRIPTION, path = '/', body,
         <meta name="twitter:title" content="${fullTitle}" />
         <meta name="twitter:description" content="${description}" />
         <meta name="twitter:image" content="${previewImage}" />
+        ${turnstile
+          ? html`<script
+              src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+              async
+              defer
+            ></script>`
+          : ''}
       </head>
       <body>
         ${body}
@@ -448,6 +465,17 @@ function checkoutNotice(config) {
   </div>`;
 }
 
+function turnstileWidget(config, action) {
+  return html`<div class="checkout-verification">
+    <div
+      class="cf-turnstile"
+      data-sitekey="${config.turnstileSiteKey}"
+      data-action="${action}"
+      data-size="flexible"
+    ></div>
+  </div>`;
+}
+
 export function submitPage(config, { values = {}, errors = {}, message = '' } = {}) {
   const amount = values.amount || amountInputValue(config.minimumCents);
   const form = config.checkoutEnabled
@@ -523,6 +551,7 @@ export function submitPage(config, { values = {}, errors = {}, message = '' } = 
 
         ${amountPicker(config, amount, errors)}
         ${checkoutNotice(config)}
+        ${turnstileWidget(config, config.turnstileActions.newCheckout)}
         <button class="button button-primary button-full" type="submit">Continue to secure payment</button>
       </form>`
     : html`<div class="closed-panel">
@@ -542,7 +571,12 @@ export function submitPage(config, { values = {}, errors = {}, message = '' } = 
       ${form}
     </main>`;
 
-  return page(config, { title: 'Get on the board', path: '/submit', body });
+  return page(config, {
+    title: 'Get on the board',
+    path: '/submit',
+    body,
+    turnstile: config.checkoutEnabled,
+  });
 }
 
 export function managePage(config, advertiser, token, { errors = {}, amount = '' } = {}) {
@@ -553,6 +587,7 @@ export function managePage(config, advertiser, token, { errors = {}, amount = ''
     ? html`<form class="give-more-form" action="${`/manage/${token}/checkout`}" method="post">
         ${amountPicker(config, amount || amountInputValue(config.minimumCents), errors)}
         ${checkoutNotice(config)}
+        ${turnstileWidget(config, config.turnstileActions.existingCheckout)}
         <button class="button button-primary button-full" type="submit">Give more</button>
       </form>`
     : html`<div class="closed-panel compact">
@@ -571,7 +606,12 @@ export function managePage(config, advertiser, token, { errors = {}, amount = ''
       ${form}
     </main>`;
 
-  return page(config, { title: `Manage ${advertiser.name}`, body, privatePage: true });
+  return page(config, {
+    title: `Manage ${advertiser.name}`,
+    body,
+    privatePage: true,
+    turnstile: config.checkoutEnabled,
+  });
 }
 
 export function successPage(config, contribution, managementTokenIsValid, managementToken = '') {

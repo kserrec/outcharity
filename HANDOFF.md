@@ -1,31 +1,48 @@
 # Outcharity session handoff
 
-This handoff is current through the production deployment and read-only smoke test of runtime commit
-`54cd151` on 2026-08-24. It becomes stale on the next runtime-affecting commit, production Worker
-deploy, or private reconciliation of the first confirmed public listing.
+This handoff is current through the production deployment, edge-rule and billing hardening, and
+real-browser Turnstile validation of Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9` on
+2026-08-24. It becomes stale on the next runtime-affecting commit, production Worker deploy, or
+private reconciliation of the first confirmed public listing.
 
 ## Current production deployment
 
-- `main` and `origin/main` contain `54cd151` (`Harden public traffic and surface charity
-  allocation`). It adds the high-contrast 90% charity banner, shared per-location checkout and
-  public-data cost brakes, five-second query-independent `/stats` caching, homepage-plus-stats
-  invalidation after money changes, and suppression of logs for invalid webhook signatures.
-- All 87 tests pass, `npm run check` passes, `git diff --check` passes, and the build passes with
-  `/dev/null` as Wrangler's environment file. The dry-run upload is 850.56 KiB raw and 121.69 KiB
-  compressed.
-- Worker version `13a426f0-6603-4345-bfda-25d0bd3477a4` receives 100% of production traffic. It
-  replaced `5cb3f64a-461a-4938-badf-6d32d8e36afe`, which is the immediate rollback target. Wrangler
-  4.125.0 uploaded the changed stylesheet, reported a 7 ms startup time, retained the custom domain
-  and 15-minute schedule, and loaded no dotenv file because deployment explicitly used `/dev/null`.
-- Live read-only checks return 200 for health, homepage, stylesheet, and stats. Checkout remains
-  enabled; the banner precedes the metrics, navigation, and hero; it links to St. Jude; the detailed
-  lower disclosure remains; desktop and mobile banner CSS is deployed; and homepage/stats responses
-  carry the expected five-second cache policy, CSP, and HSTS. No payment or private record was
-  created during verification.
-- At the smoke test, public stats report `$7` paid, `$6.30` to charity, four payments, four visible
-  advertisers, a `$1.75` average, and 444 Website visits. The delivery ledger partitions all
-  `$96.30` of recorded charity shares into `$0` provider-accepted, `$96.30` awaiting provider, and
-  `$0` stopped before delivery.
+- `main` is the release branch and tracks `origin/main`. The reviewed Turnstile and
+  denial-of-wallet source and its verification record are committed there and match the deployed
+  production behavior.
+- The deployed application requires a managed Turnstile proof on both checkout routes, verifies it
+  server-side before D1, R2, or Stripe work, keeps an earlier per-client limiter, and consumes the
+  shared checkout brake only after successful proof. Public cache misses and valid-looking private
+  reads share a separate aggregate lookup brake.
+- All 93 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
+  4.125.0 build passes with `/dev/null` as its environment file. The dry-run upload is 855.31 KiB
+  raw and 122.89 KiB compressed. A fresh final cold review found no remaining proven finding.
+- Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9` receives 100% of production traffic.
+  Secret-change version `fcb9abe6-e201-469d-8d4b-31b9b258cf38` is the immediate rollback target;
+  it contains the preceding runtime plus the encrypted Turnstile secret. Wrangler retained the
+  custom domain and 15-minute schedule and loaded no dotenv file.
+- Live `/health` returns 200 with checkout enabled. `/submit` contains the approved public site key,
+  Turnstile script, and `new_checkout` action. Both checkout POST routes return 403 when proof is
+  missing; the required script/frame CSP and responsive widget CSS are live; homepage and `/stats`
+  retain their five-second cache policy. These probes created no payment or private record.
+- A normal browser produced a fresh production token on `/submit`. An intentionally incomplete
+  checkout request using it returned application validation status 422, while immediately replaying
+  that identical token returned the application's Turnstile rejection status 403. This proves the
+  live browser-to-backend-to-Siteverify path and single-use enforcement without creating a payment,
+  logo, or advertiser record.
+- Cloudflare identifies the account as Workers Free: the platform enforces 10 ms CPU per request
+  and 100,000 Worker requests per day, and rejected a custom CPU limit before creating a version.
+  D1 Free limits fail instead of billing overages. R2 can still incur usage charges after its
+  monthly free tier. The zone's sole Free-plan rate-limit slot now protects both checkout paths;
+  Billing > Billable Usage has an account-wide `$1` early warning and the auto-created `$10`
+  fallback. These alerts are delayed informational warnings, not hard spending caps.
+- Zone Rulesets started with no rate-limit entry point or conflicting custom/skip rule. Active
+  ruleset `644fd39039ce4fc78adf89ce0e44d2ab`, rule
+  `03a4768f4b5e4e41ad6919c6c8968d63`, blocks an IP after five requests in ten seconds to
+  `/checkout` or `/manage/*/checkout`, for ten seconds. The Stripe webhook and all other paths are
+  excluded. Cloudflare dry-run validation, independent cold review, API readback, encoded-path
+  probes, five application 404s followed by two edge error-1015/429 blocks, and post-expiration
+  health 200 / missing-proof 403 all passed.
 
 ## Exact stop point
 
@@ -36,12 +53,14 @@ deploy, or private reconciliation of the first confirmed public listing.
   inert Stripe-shaped test fixtures added in historical commit `d63d4cf`; it does not weaken any
   detection rule or exclude any source path. GitHub Security runs `32593742789` and `32594745669`
   pass, and native GitHub secret scanning plus push protection are enabled.
-- Production runs Worker version `13a426f0-6603-4345-bfda-25d0bd3477a4`, deployed from runtime
-  commit `54cd151` on `main`. It replaced version `5cb3f64a-461a-4938-badf-6d32d8e36afe`, which is
-  the immediate rollback target. The deployment includes the prior launch work plus the 90% banner,
-  shared cost brakes, stats caching/invalidation, and invalid-signature log suppression. The source
-  and verification evidence are committed, so `origin/main` is the recovery source.
-- Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. The homepage now shows a confirmed
+- Production runs Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9`. It replaced secret-change
+  version `fcb9abe6-e201-469d-8d4b-31b9b258cf38`, which is the immediate rollback target. The
+  deployed Turnstile/application hardening source and current verification evidence are committed
+  on `main`; `origin/main` is the recovery source.
+- Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. Missing proof on both checkout
+  routes returns 403 before downstream work. A fresh real-browser proof reaches application
+  validation with 422, and immediate replay of that proof is rejected with 403. The homepage now
+  shows a confirmed
   four-entry leaderboard and links to Stats from the primary navigation, campaign panel, and footer.
   `/stats` returns six aggregate cards, its canonical URL is correct, the sitemap includes it, and
   the deployed mobile stylesheet gives each leaderboard entry and stats card its own row. Homepage
@@ -49,33 +68,44 @@ deploy, or private reconciliation of the first confirmed public listing.
   board: `$7` paid and `$6.30` allocated to charity. The hidden founder `$100` contribution no longer
   affects those public numbers; its matching Stripe event, D1 rows, charity hold state, and eventual
   GoodAPI record have not been privately reconciled.
-- The sixth card reported 444 Website visits at the current smoke test. This is an aggregate entry
-  count rather than unique people or page views; bots are excluded, and European visits are absent
-  because the existing automatic-injection setup does not collect them. D1 retains only daily
-  counts and fetch timestamps.
+- The sixth card reported 444 Website visits at the preceding `54cd151` smoke test. This is an
+  aggregate entry count rather than unique people or page views; bots are excluded, and European
+  visits are absent because the existing automatic-injection setup does not collect them. D1
+  retains only daily counts and fetch timestamps.
 
 ## Release verification
 
-- All 87 tests pass, `npm run check` passes, `git diff --check` passes, and `npm run build` passes
-  while explicitly using `/dev/null` as Wrangler's environment file. The Worker upload is 850.56
-  KiB raw and 121.69 KiB compressed, with a 7 ms startup time.
-- This deployment adds no migration. Wrangler 4.125.0 deployed the Worker to the `outcharity.com`
-  custom domain, uploaded the changed stylesheet, and retained the 15-minute scheduled trigger.
+- All 93 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
+  4.125.0 dry build passes while explicitly using `/dev/null` as its environment file. The Worker
+  upload is 855.31 KiB raw and 122.89 KiB compressed, with a 6 ms startup time.
+- This deployment adds no migration. Wrangler deployed the Worker to the `outcharity.com` custom
+  domain and retained the 15-minute scheduled trigger. Version inspection shows all five encrypted
+  secret binding names, including `TURNSTILE_SECRET`, without exposing their values.
 - `npm audit` and `npm audit --omit=dev` both report zero vulnerabilities. GitHub Dependabot has
   zero open alerts and automatic security updates remain enabled.
 - The checksum-pinned Gitleaks 8.30.1 archive matches SHA-256
   `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; the exact CI command scans
   full Git history while explicitly excluding every dotenv pattern and reports no leak.
-- Live read-only checks after this deployment pass for health, homepage, `/stats`, and the deployed
-  stylesheet. The live homepage contains the correctly ordered 90% banner and lower disclosure;
-  `/stats` reports `$7` paid, `$6.30` to charity, four payments, four advertisers, a `$1.75` average,
-  and 444 Website visits. The current deploy changed only `styles.css` among static assets.
+- Live checks after this deployment pass for health, homepage, `/stats`, `/submit`, and the deployed
+  stylesheet. The two safe missing-proof POST probes return 403, and the public/private CSP variants
+  both allow Turnstile while private pages continue to exclude analytics.
+- Live zone checks prove URL-encoded checkout paths reach the same protected application routes.
+  The active WAF rule permits five matching requests from one IP in ten seconds and stops the next
+  two at Cloudflare with HTTP 429 before Worker execution; normal responses resume after the
+  ten-second mitigation period.
+- Cloudflare Billing > Billable Usage shows its auto-created account-wide `$10` alert. Kyle also
+  created an account-wide `$1` alert named `Outcharity early usage warning` with his selected email
+  recipient. Both are informational warnings after processed usage, not hard spending caps.
+- The local temporary Turnstile and WAF token files were permanently deleted, and both dashboard
+  tokens were revoked after their respective live verification. Neither token belongs in the
+  repository.
 
 ## Production state that remains in force
 
 - Checkout is open only because every launch-gate value is present and
   `OUTCHARITY_LAUNCH_APPROVED=true`. Production still requires a live Stripe key and rejects
-  non-live webhook events.
+  non-live webhook events. Checkout also closes if the Turnstile public key, encrypted secret,
+  exact hostname, or either rate-limit binding is absent.
 - Confirmed contributions remain immutable. Refunds and disputes hide the listing, remove the
   affected payment from rank and public totals, and prevent charity delivery while suspended.
   Payments belonging to any otherwise hidden listing are also absent from homepage and `/stats`
@@ -109,6 +139,8 @@ deploy, or private reconciliation of the first confirmed public listing.
 
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch and upstream: `main` tracking `origin/main`
+- The deployed Phase 11 application hardening and its verification evidence are committed and
+  pushed to `origin/main`.
 - Generated `graphify-out/` data remains local and is ignored; it is not part of the repository.
 - Public release: `https://github.com/kserrec/outcharity/releases/tag/v0.1.0`
 - The old draft pull request is merged and is no longer the release path. New finished work goes to

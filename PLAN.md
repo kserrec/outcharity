@@ -512,12 +512,16 @@ every charity share.
 - [x] Verify the live traffic path and distinguish Cloudflare's network-level DDoS mitigation from
   application-layer cost controls. Record that Workers Rate Limiting and the Cache API execute
   after a Worker invocation and operate independently in each Cloudflare location.
-- [x] Put one shared checkout counter in front of both anonymous checkout paths while preserving
-  their per-client counters, body limits, validation, R2-before-Stripe consistency rule, payment
-  allocation, webhook authority, and charity-delivery behavior.
+- [x] Put one shared checkout counter on both anonymous checkout paths after successful bot proof
+  but before D1, R2, or Stripe work, while preserving their earlier per-client counters, body
+  limits, validation, R2-before-Stripe consistency rule, payment allocation, webhook authority,
+  and charity-delivery behavior.
 - [x] Cache `/stats` for five seconds with one query-independent key, put homepage and stats D1
   cache misses behind one shared lookup counter, purge both public-data cache entries after a
   confirmed payment or listing suspension, and stop logging unsigned hostile webhook probes.
+- [x] Extend that aggregate lookup counter to valid-looking success and management requests and
+  uncached logos, so distributed clients cannot bypass the per-client limits to multiply D1 or R2
+  reads.
 - [x] Deploy this first server-side hardening chunk together with the homepage allocation banner,
   before the remaining Turnstile and account-control work.
   - All 87 tests, syntax checking, the dotenv-isolated 121.69 KiB compressed dry build, and diff
@@ -527,21 +531,56 @@ every charity share.
   - Live health, homepage, stylesheet, and stats checks pass without creating a payment. Checkout
     remains enabled; the banner and mobile styles are deployed; stats uses the five-second cache
     policy; and CSP and HSTS remain present
-- [ ] Create one managed Turnstile widget for `outcharity.com`, `localhost`, and `127.0.0.1`; verify
+- [x] Create one managed Turnstile widget for `outcharity.com`, `localhost`, and `127.0.0.1`; verify
   a one-use token server-side on both checkout routes with separate expected actions, the expected
   hostname, the connecting IP, a 2,048-character token cap, and a ten-second verification timeout.
   Store the secret only in Cloudflare's encrypted Worker secret store and keep checkout closed if
   either Turnstile binding is missing outside local development.
-- [ ] Inspect the account's actual Workers plan, CPU metrics, zone security features, existing
-  rules, and billing notifications. Set the lowest CPU ceiling supported by measured legitimate
-  requests, add the available pre-Worker rate-limit protection for checkout without touching the
-  Stripe webhook path, and enable practical spend notifications without claiming they are a hard
-  billing cap.
-- [ ] After the remaining Turnstile and account-control work, run focused and full tests, syntax
-  checking, a dotenv-isolated dry build, and diff checks; have a fresh agent cold-review the
-  completed hardening; deploy only after checkout remains fully configured; then validate
-  Turnstile, checkout refusal, cache behavior, security headers, health, and rollback state in
-  production without creating a payment.
+- [x] Verify that the `outcharity.com` zone uses the Free Website plan and that Cloudflare's
+  deployment API identifies the account as Workers Free. Record the platform's fixed
+  10-millisecond per-invocation CPU ceiling and 100,000-request daily limit. Do not configure a
+  custom CPU limit: Cloudflare rejects it before version creation on this plan.
+- [x] Test, independently cold-review, deploy, and smoke-test the application hardening.
+  - All 93 tests, syntax checking, diff checking, the dotenv-isolated 855.31 KiB raw / 122.89 KiB
+    compressed dry build, and a fresh final security review pass
+  - Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9` receives 100% of production traffic;
+    secret-change version `fcb9abe6-e201-469d-8d4b-31b9b258cf38` is the immediate rollback target
+  - Live health reports checkout enabled; `/submit` contains the approved site key and
+    `new_checkout` action; both checkout POST routes refuse a missing proof with 403; the Turnstile
+    CSP and responsive stylesheet are live; homepage and stats retain five-second caching
+- [x] Complete a browser-backed production check that one fresh real Turnstile token reaches
+  application validation and that replaying the same token is refused, without creating a payment.
+  - In a normal browser on the live `/submit` page, the managed widget produced a fresh token. An
+    intentionally incomplete `POST /checkout` using that token returned 422 with the application's
+    field-validation response, proving the browser-to-backend-to-Siteverify path accepted it.
+  - Replaying the identical token immediately returned 403 with the application's human-verification
+    rejection. Neither request reached logo storage, advertiser persistence, or Stripe checkout.
+- [x] Use a narrowly scoped Zone WAF Edit token to inspect the Free plan's one pre-Worker
+  rate-limit slot, preserve any existing rule, and add checkout protection without touching the
+  Stripe webhook path.
+  - No rate-limit entry point or conflicting custom/skip rule existed. Cloudflare accepted the
+    exact payload in a non-persisting dry run, and an independent cold review approved it.
+  - Ruleset `644fd39039ce4fc78adf89ce0e44d2ab`, rule
+    `03a4768f4b5e4e41ad6919c6c8968d63`, blocks an IP after five requests in ten seconds to
+    `/checkout` or `/manage/*/checkout`, for ten seconds. Free counts all methods and each
+    Cloudflare location separately.
+  - A same-connection production probe returned five application 404 responses followed by two
+    Cloudflare error-1015/429 responses. After expiration, health returned 200 and missing
+    Turnstile proof returned the expected application 403. Encoded checkout paths were normalized
+    into the protected application routes.
+- [x] Inspect Cloudflare's Billing > Billable Usage page and create a practical account-wide budget
+  alert if one is not already present.
+  - The dashboard showed Cloudflare's auto-created account-wide `$10` alert.
+  - A second account-wide `$1` alert named `Outcharity early usage warning` now notifies Kyle's
+    selected billing recipient. It is an informational warning after processed usage, not a hard
+    spending cap, and the `$10` alert remains as a fallback.
+- [x] After the live-token, Rulesets, and billing checks, record the exact final account state and
+  revoke every temporary Cloudflare API credential used for setup.
+  - The managed Turnstile widget remains active for the three approved domains and two checkout
+    actions; its secret remains only in encrypted Worker secret storage.
+  - The checkout-only WAF rate-limit rule and the account-wide `$1` and `$10` budget alerts remain
+    active. Both local setup-token files were permanently deleted, and both temporary dashboard API
+    tokens were revoked.
 
 Exit: Network floods are handled at Cloudflare's edge, automated checkout abuse is challenged
 before R2 or Stripe work, downstream paid resources have layered cost brakes, and account-level

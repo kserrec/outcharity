@@ -54,6 +54,7 @@ import {
   paymentIntentIdForCharge,
   stripeModeMatches,
   verifyStripeEvent,
+  verifyTurnstileToken,
 } from './providers.js';
 import {
   aboutPage,
@@ -129,6 +130,24 @@ function messageResponse(context, config, options) {
 
 function requestError(status, message) {
   return Object.assign(new Error(message), { status });
+}
+
+async function requireTurnstileProof(context, formData, config, expectedAction) {
+  const verified = await verifyTurnstileToken({
+    token: formData.get('cf-turnstile-response'),
+    secret: context.env.TURNSTILE_SECRET,
+    remoteIp: context.req.header('CF-Connecting-IP'),
+    expectedAction,
+    expectedHostnames: config.turnstileHostnames,
+  });
+  if (!verified) {
+    throw requestError(403, 'Please complete the human-verification check and try again.');
+  }
+}
+
+async function requireLookupLimits(request, limiter, clientScope) {
+  await requireRateLimit(request, limiter, clientScope);
+  await requireSharedRateLimit(request, limiter, 'lookup');
 }
 
 function safeFormValues(formData) {
@@ -219,7 +238,7 @@ app.get('/', async (context) => {
     if (cached) return cached;
   }
 
-  await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'public-data');
+  await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'lookup');
   const config = configFor(context);
   const data = context.env.DB
     ? await getLeaderboard(context.env.DB)
@@ -264,8 +283,14 @@ app.post('/checkout', async (context) => {
   if (!config.checkoutEnabled) return checkoutClosed(context, config);
   requireSameOrigin(context.req.raw);
   await requireRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'new-checkout');
-  await requireSharedRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'checkout');
   const formData = await readFormDataWithinLimit(context.req.raw, NEW_CHECKOUT_BODY_LIMIT);
+  await requireTurnstileProof(
+    context,
+    formData,
+    config,
+    config.turnstileActions.newCheckout,
+  );
+  await requireSharedRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'checkout');
   const values = safeFormValues(formData);
   const { listing, logo, errors, message } = await validateSubmission(formData, config);
   if (errors) {
@@ -340,7 +365,7 @@ app.get('/manage/:token', async (context) => {
     );
   }
 
-  await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'manage');
+  await requireLookupLimits(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'manage');
 
   const advertiser = await findAdvertiserByTokenHash(context.env.DB, await hashToken(token));
   if (!advertiser) {
@@ -367,11 +392,17 @@ app.post('/manage/:token/checkout', async (context) => {
     context.env.CHECKOUT_RATE_LIMITER,
     'existing-checkout',
   );
-  await requireSharedRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'checkout');
   const formData = await readFormDataWithinLimit(
     context.req.raw,
     EXISTING_CHECKOUT_BODY_LIMIT,
   );
+  await requireTurnstileProof(
+    context,
+    formData,
+    config,
+    config.turnstileActions.existingCheckout,
+  );
+  await requireSharedRateLimit(context.req.raw, context.env.CHECKOUT_RATE_LIMITER, 'checkout');
   const advertiser = await findAdvertiserByTokenHash(context.env.DB, await hashToken(token));
   if (!advertiser) throw requestError(404, 'Management link not found.');
   if (advertiser.is_hidden) {
@@ -520,7 +551,7 @@ app.get('/success', async (context) => {
       status: 400,
     });
   }
-  await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'success');
+  await requireLookupLimits(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'success');
 
   const contribution = await getContributionBySession(context.env.DB, sessionId);
 
@@ -551,7 +582,7 @@ app.get('/logos/*', async (context) => {
     if (cached) return cached;
   }
 
-  await requireRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'logo');
+  await requireLookupLimits(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'logo');
 
   if (!(await isPublicLogo(context.env.DB, key))) return context.notFound();
 
@@ -577,7 +608,7 @@ app.get('/stats', async (context) => {
     if (cached) return cached;
   }
 
-  await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'public-data');
+  await requireSharedRateLimit(context.req.raw, context.env.LOOKUP_RATE_LIMITER, 'lookup');
   const stats = context.env.DB
     ? await getPublicStats(context.env.DB)
     : {

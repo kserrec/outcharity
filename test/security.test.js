@@ -12,6 +12,7 @@ import { app } from '../src/index.js';
 import {
   configuredEnvironment as launchEnvironment,
   executionContext,
+  turnstileTestToken,
 } from './helpers/environment.js';
 
 function requestStream(byteCounts, hooks = {}) {
@@ -165,13 +166,13 @@ test('rate limiting fails closed in production and cannot be bypassed by omittin
   await requireSharedRateLimit(new Request('http://localhost/checkout'), undefined, 'checkout');
 });
 
-test('client and aggregate rate limits fire before checkout, database, and storage work', async () => {
+test('client checkout and lookup rate limits fire before request bodies, database, and storage work', async () => {
   const checkoutHooks = {};
   const checkoutKeys = [];
   const blockedCheckout = {
     async limit({ key }) {
       checkoutKeys.push(key);
-      return { success: key !== 'checkout:all' };
+      return { success: false };
     },
   };
   const lookupKeys = [];
@@ -229,9 +230,7 @@ test('client and aggregate rate limits fire before checkout, database, and stora
   assert.equal(existingCheckoutHooks.cancelled, true);
   assert.deepEqual(checkoutKeys, [
     'new-checkout:unknown',
-    'checkout:all',
     'existing-checkout:unknown',
-    'checkout:all',
   ]);
 
   for (const [name, url, overrides] of [
@@ -264,8 +263,173 @@ test('client and aggregate rate limits fire before checkout, database, and stora
     'success:unknown',
     'manage:unknown',
     'logo:unknown',
-    'public-data:all',
-    'public-data:all',
+    'lookup:all',
+    'lookup:all',
+  ]);
+});
+
+test('distributed lookup traffic hits one aggregate brake before database or storage work', async () => {
+  const keys = [];
+  const aggregateBlocked = {
+    async limit({ key }) {
+      keys.push(key);
+      return { success: key !== 'lookup:all' };
+    },
+  };
+  const environment = launchEnvironment({
+    LOOKUP_RATE_LIMITER: aggregateBlocked,
+    DB: { prepare() { throw new Error('D1 must not be reached'); } },
+    LOGOS: { async get() { throw new Error('R2 must not be reached'); } },
+  });
+  const routes = [
+    'https://outcharity.com/success?session_id=cs_live_12345678',
+    `https://outcharity.com/manage/${'a'.repeat(64)}`,
+    'https://outcharity.com/logos/11111111-1111-4111-8111-111111111111.png',
+  ];
+
+  for (const url of routes) {
+    const response = await app.fetch(new Request(url), environment, executionContext);
+    assert.equal(response.status, 429, url);
+  }
+  assert.deepEqual(keys, [
+    'success:unknown',
+    'lookup:all',
+    'manage:unknown',
+    'lookup:all',
+    'logo:unknown',
+    'lookup:all',
+  ]);
+});
+
+test('checkout proof failures stop before database, storage, or Stripe work', async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const rejectingEnvironment = launchEnvironment({
+    DB: { prepare() { throw new Error('D1 must not be reached'); } },
+    LOGOS: { async put() { throw new Error('R2 must not be reached'); } },
+  });
+  const routes = [
+    ['new checkout', '/checkout'],
+    ['existing checkout', `/manage/${'a'.repeat(64)}/checkout`],
+  ];
+
+  let verificationCalls = 0;
+  globalThis.fetch = async () => {
+    verificationCalls += 1;
+    throw new Error('Turnstile must not be called without a token');
+  };
+  for (const [name, path] of routes) {
+    const response = await app.fetch(
+      new Request(`https://outcharity.com${path}`, {
+        method: 'POST',
+        headers: { Origin: 'https://outcharity.com' },
+        body: new URLSearchParams({ amount: '25' }),
+      }),
+      rejectingEnvironment,
+      executionContext,
+    );
+    assert.equal(response.status, 403, `${name} missing token`);
+  }
+  assert.equal(verificationCalls, 0);
+
+  for (const [name, result] of [
+    ['unsuccessful challenge', { success: false, action: 'new_checkout', hostname: 'outcharity.com' }],
+    ['wrong action', { success: true, action: 'existing_checkout', hostname: 'outcharity.com' }],
+    ['wrong hostname', { success: true, action: 'new_checkout', hostname: 'localhost' }],
+  ]) {
+    globalThis.fetch = async () => Response.json(result);
+    const response = await app.fetch(
+      new Request('https://outcharity.com/checkout', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://outcharity.com',
+          'CF-Connecting-IP': '203.0.113.9',
+        },
+        body: new URLSearchParams({
+          amount: '25',
+          'cf-turnstile-response': turnstileTestToken,
+        }),
+      }),
+      rejectingEnvironment,
+      executionContext,
+    );
+    assert.equal(response.status, 403, name);
+  }
+});
+
+test('invalid checkout proofs cannot consume the shared checkout brake', async (context) => {
+  const originalFetch = globalThis.fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const limiterKeys = [];
+  const environment = launchEnvironment({
+    CHECKOUT_RATE_LIMITER: {
+      async limit({ key }) {
+        limiterKeys.push(key);
+        return { success: key !== 'checkout:all' };
+      },
+    },
+    DB: { prepare() { throw new Error('D1 must not be reached'); } },
+    LOGOS: { async put() { throw new Error('R2 must not be reached'); } },
+  });
+  const routes = [
+    ['new_checkout', '/checkout', 'new-checkout:unknown'],
+    ['existing_checkout', `/manage/${'a'.repeat(64)}/checkout`, 'existing-checkout:unknown'],
+  ];
+
+  let verificationCalls = 0;
+  let currentAction = '';
+  globalThis.fetch = async () => {
+    verificationCalls += 1;
+    return Response.json({
+      success: true,
+      action: currentAction,
+      hostname: 'outcharity.com',
+    });
+  };
+
+  for (const [, path] of routes) {
+    const response = await app.fetch(
+      new Request(`https://outcharity.com${path}`, {
+        method: 'POST',
+        headers: { Origin: 'https://outcharity.com' },
+        body: new URLSearchParams({ amount: '25' }),
+      }),
+      environment,
+      executionContext,
+    );
+    assert.equal(response.status, 403, path);
+  }
+  assert.equal(verificationCalls, 0);
+  assert.deepEqual(limiterKeys, routes.map(([, , clientKey]) => clientKey));
+
+  limiterKeys.length = 0;
+  for (const [action, path] of routes) {
+    currentAction = action;
+    const response = await app.fetch(
+      new Request(`https://outcharity.com${path}`, {
+        method: 'POST',
+        headers: { Origin: 'https://outcharity.com' },
+        body: new URLSearchParams({
+          amount: '25',
+          'cf-turnstile-response': turnstileTestToken,
+        }),
+      }),
+      environment,
+      executionContext,
+    );
+    assert.equal(response.status, 429, path);
+  }
+  assert.equal(verificationCalls, 2);
+  assert.deepEqual(limiterKeys, [
+    'new-checkout:unknown',
+    'checkout:all',
+    'existing-checkout:unknown',
+    'checkout:all',
   ]);
 });
 
@@ -327,7 +491,7 @@ test('stats query variations share one cache entry and one database read', async
   }
 
   assert.equal(databaseReads, 1);
-  assert.deepEqual(limiterKeys, ['public-data:all']);
+  assert.deepEqual(limiterKeys, ['lookup:all']);
   assert.deepEqual([...entries.keys()], ['https://outcharity.com/stats']);
 });
 
@@ -435,7 +599,11 @@ test('production requests use only the configured HTTPS origin', async () => {
   assert.equal(canonicalResponse.headers.get('Referrer-Policy'), 'same-origin');
   assert.match(
     canonicalResponse.headers.get('Content-Security-Policy'),
-    /script-src 'self' https:\/\/static\.cloudflareinsights\.com(?:;|$)/,
+    /script-src 'self' https:\/\/static\.cloudflareinsights\.com https:\/\/challenges\.cloudflare\.com(?:;|$)/,
+  );
+  assert.match(
+    canonicalResponse.headers.get('Content-Security-Policy'),
+    /frame-src https:\/\/challenges\.cloudflare\.com(?:;|$)/,
   );
   assert.doesNotMatch(
     canonicalResponse.headers.get('Content-Security-Policy'),
@@ -453,6 +621,7 @@ test('deployment disables alternate public hosts and hardens static assets', () 
     { pattern: 'outcharity.com', custom_domain: true },
   ]);
   assert.deepEqual(wrangler.triggers?.crons, ['*/15 * * * *']);
+  assert.equal(wrangler.limits, undefined, 'Workers Free rejects custom CPU limits');
   // Management links carry their credential in the URL; per-request invocation logs would
   // record those URLs, so only the Worker's own console output may be collected.
   assert.equal(wrangler.observability?.logs?.invocation_logs, false);
@@ -467,8 +636,9 @@ test('deployment disables alternate public hosts and hardens static assets', () 
   assert.match(staticHeaders, /Referrer-Policy: same-origin/);
   assert.match(
     staticHeaders,
-    /script-src 'self' https:\/\/static\.cloudflareinsights\.com(?:;|$)/,
+    /script-src 'self' https:\/\/static\.cloudflareinsights\.com https:\/\/challenges\.cloudflare\.com(?:;|$)/,
   );
+  assert.match(staticHeaders, /frame-src https:\/\/challenges\.cloudflare\.com(?:;|$)/);
   assert.doesNotMatch(staticHeaders, /script-src[^;]*\*/);
 });
 
@@ -496,11 +666,11 @@ test('logo query variations share one cache entry and one storage read', async (
 
   let storageReads = 0;
   let databaseReads = 0;
-  let limiterCalls = 0;
+  const limiterKeys = [];
   const env = launchEnvironment({
     LOOKUP_RATE_LIMITER: {
-      async limit() {
-        limiterCalls += 1;
+      async limit({ key }) {
+        limiterKeys.push(key);
         return { success: true };
       },
     },
@@ -554,7 +724,7 @@ test('logo query variations share one cache entry and one storage read', async (
 
   assert.equal(storageReads, 1);
   assert.equal(databaseReads, 1);
-  assert.equal(limiterCalls, 1);
+  assert.deepEqual(limiterKeys, ['logo:unknown', 'lookup:all']);
   assert.deepEqual([...entries.keys()], [`https://outcharity.com${logoPath}`]);
 });
 
@@ -688,12 +858,24 @@ test('unreadable or wrongly typed form bodies are refused with 400, not a server
   }
   assert.equal(errors.mock.callCount(), 0);
 
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({
+    success: true,
+    action: 'existing_checkout',
+    hostname: 'outcharity.com',
+  });
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
   const urlEncoded = await app.request(
     'https://outcharity.com/manage/aa'.padEnd(31 + 64, 'a') + '/checkout',
     {
       method: 'POST',
       headers: { Origin: 'https://outcharity.com', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'amount=10',
+      body: new URLSearchParams({
+        amount: '10',
+        'cf-turnstile-response': turnstileTestToken,
+      }),
     },
     { ...environment, DB: { prepare: () => ({ bind: () => ({ first: async () => null }) }) } },
     executionContext,

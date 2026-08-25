@@ -11,6 +11,7 @@ import {
   createGoodApiDonation,
   createStripeClient,
   verifyStripeEvent,
+  verifyTurnstileToken,
 } from '../src/providers.js';
 
 const advertiserId = '11111111-1111-4111-8111-111111111111';
@@ -147,6 +148,97 @@ test('Stripe webhook verification accepts a valid signature and rejects a bad on
   const event = await verifyStripeEvent(stripe, payload, signature, secret);
   assert.equal(event.id, 'evt_test');
   await assert.rejects(() => verifyStripeEvent(stripe, payload, signature, 'wrong_secret'));
+});
+
+test('Turnstile verification sends a bounded backend request and checks action and hostname', async (context) => {
+  const timeoutSignal = new AbortController().signal;
+  const timeouts = [];
+  context.mock.method(AbortSignal, 'timeout', (milliseconds) => {
+    timeouts.push(milliseconds);
+    return timeoutSignal;
+  });
+  let captured;
+  const verified = await verifyTurnstileToken(
+    {
+      token: 'turnstile-token',
+      secret: 'turnstile-secret',
+      remoteIp: '203.0.113.9',
+      expectedAction: 'new_checkout',
+      expectedHostnames: ['outcharity.com'],
+    },
+    async (url, options) => {
+      captured = { url, options };
+      return Response.json({
+        success: true,
+        action: 'new_checkout',
+        hostname: 'outcharity.com',
+      });
+    },
+  );
+
+  assert.equal(verified, true);
+  assert.equal(captured.url, 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
+  assert.equal(captured.options.method, 'POST');
+  assert.equal(
+    captured.options.headers['Content-Type'],
+    'application/x-www-form-urlencoded',
+  );
+  assert.equal(captured.options.body.get('secret'), 'turnstile-secret');
+  assert.equal(captured.options.body.get('response'), 'turnstile-token');
+  assert.equal(captured.options.body.get('remoteip'), '203.0.113.9');
+  assert.equal(captured.options.signal, timeoutSignal);
+  assert.deepEqual(timeouts, [10_000]);
+
+  for (const result of [
+    { success: false, action: 'new_checkout', hostname: 'outcharity.com' },
+    { success: true, action: 'existing_checkout', hostname: 'outcharity.com' },
+    { success: true, action: 'new_checkout', hostname: 'localhost' },
+  ]) {
+    assert.equal(
+      await verifyTurnstileToken(
+        {
+          token: 'turnstile-token',
+          secret: 'turnstile-secret',
+          expectedAction: 'new_checkout',
+          expectedHostnames: ['outcharity.com'],
+        },
+        async () => Response.json(result),
+      ),
+      false,
+      JSON.stringify(result),
+    );
+  }
+});
+
+test('Turnstile verification fails closed on invalid input and upstream failures', async () => {
+  let fetchCalls = 0;
+  const input = {
+    secret: 'turnstile-secret',
+    expectedAction: 'new_checkout',
+    expectedHostnames: ['outcharity.com'],
+  };
+  const unusedFetcher = async () => {
+    fetchCalls += 1;
+    return Response.json({ success: true });
+  };
+
+  for (const token of ['', 'x'.repeat(2_049), 'contains whitespace']) {
+    assert.equal(await verifyTurnstileToken({ ...input, token }, unusedFetcher), false);
+  }
+  assert.equal(fetchCalls, 0);
+
+  for (const fetcher of [
+    async () => new Response('', { status: 503 }),
+    async () => new Response('not json'),
+    async () => {
+      throw new Error('network unavailable');
+    },
+  ]) {
+    assert.equal(
+      await verifyTurnstileToken({ ...input, token: 'turnstile-token' }, fetcher),
+      false,
+    );
+  }
 });
 
 test('GoodAPI sends exact charity cents and rejects a mismatched confirmation', async (context) => {

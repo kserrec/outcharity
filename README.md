@@ -8,6 +8,7 @@ Outcharity is a public advertising leaderboard where rank is determined by confi
 - D1 for advertisers, immutable contribution amounts, and daily aggregate visit totals
 - R2 for validated PNG, JPEG, and WebP logos
 - Cloudflare Cache API for five-second homepage and stats caching
+- Cloudflare Turnstile with mandatory server-side verification on both checkout forms
 - Stripe Checkout and signed webhooks
 - GoodAPI charity donations with provider-side idempotency
 
@@ -47,7 +48,10 @@ visitors.
 
 ## Safety gate
 
-Checkout remains closed unless all required charity details, Stripe secrets, the GoodAPI secret, both Cloudflare rate-limit bindings, the canonical production origin, and `OUTCHARITY_LAUNCH_APPROVED=true` are present. This prevents an unfinished, unprotected, or unapproved campaign from accepting money.
+Checkout remains closed unless all required charity details, Stripe secrets, the GoodAPI secret,
+both Cloudflare rate-limit bindings, the Turnstile site key, encrypted Turnstile secret and exact
+hostname allowlist, the canonical production origin, and `OUTCHARITY_LAUNCH_APPROVED=true` are
+present. This prevents an unfinished, unprotected, or unapproved campaign from accepting money.
 
 Version 1 is locked to a 90% charity allocation and a 10% platform allocation. A conflicting runtime value keeps checkout closed and cannot change the public promise. Fractional cents are rounded in the charity's favor. Outcharity absorbs payment-processing fees rather than subtracting them from the charity amount.
 
@@ -78,9 +82,16 @@ hour; analytics failures are logged without interrupting charity delivery or rep
 successful count.
 
 Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs
-are disabled. GitHub dependency alerts, automatic security updates, native secret scanning, and
-push protection are enabled. The checksum-pinned Gitleaks scanner also checks the repository's
-full history on every push and pull request.
+are disabled. The account is on Workers Free, where Cloudflare enforces a fixed 10-millisecond CPU
+ceiling per invocation and a 100,000-request daily limit instead of metered Workers request or CPU
+overages. Expensive public cache misses plus private lookups share an aggregate per-location cost
+brake to preserve D1 availability before its daily Free-plan limit and to reduce R2 operations,
+which can incur usage charges after their monthly free tier. Cloudflare's Free-plan zone rate-limit
+slot also stops an IP at the edge after five requests to either checkout path in ten seconds, before
+the Worker runs; Turnstile and the Worker-side brakes cover the distributed traffic that this
+per-IP, per-location rule cannot. GitHub dependency alerts, automatic security updates, native
+secret scanning, and push protection are enabled. The checksum-pinned Gitleaks scanner also checks
+the repository's full history on every push and pull request.
 
 GoodAPI Donations is activated, the production charity record is verified, the live provider key
 is stored as a Worker secret, and the complete flow passed a disposable sandbox rehearsal. The
@@ -108,6 +119,9 @@ evidence and exact continuation point.
 - Public homepage and stats HTML are cached for five seconds; successful webhook insertion invalidates both local edge copies immediately.
 - A signed `charge.refunded` or `charge.dispute.created` event hides the affected listing, removes that payment from the listing's rank total and from the public totals, and invalidates the local edge copies of the homepage, stats page, and logo; the payment record itself is never altered. A suspension that arrives before the payment's confirmation is stored and applied when the confirmation lands, and a suspended payment never sends money to charity.
 - Outside local development, checkout requires a live-mode Stripe key and the webhook refuses non-live events, so a test-mode configuration can never create a live listing or charity delivery.
+- Both checkout forms require a fresh Cloudflare Turnstile proof. The backend independently checks
+  the proof's success, route-specific action, exact approved hostname, maximum length, and
+  connecting IP before any D1, R2, or Stripe work.
 
 `SECURITY.md` records the threat model, the accepted trust decisions, and the audit history.
 

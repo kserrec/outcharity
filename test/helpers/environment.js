@@ -15,6 +15,9 @@ export function configuredEnvironment(overrides = {}) {
     MIN_CONTRIBUTION_CENTS: '100',
     MAX_CONTRIBUTION_CENTS: '10000000',
     CHARITY_HOLD_DAYS: '30',
+    TURNSTILE_SITE_KEY: '0x4AAAAAAA-test-site-key',
+    TURNSTILE_SECRET: 'turnstile-test-secret',
+    TURNSTILE_HOSTNAMES: 'outcharity.com',
     STRIPE_SECRET_KEY: 'sk_live_placeholder',
     STRIPE_WEBHOOK_SECRET: 'configured',
     GOODAPI_API_KEY: 'configured',
@@ -23,6 +26,21 @@ export function configuredEnvironment(overrides = {}) {
     CHECKOUT_RATE_LIMITER: { async limit() { return { success: true }; } },
     LOOKUP_RATE_LIMITER: { async limit() { return { success: true }; } },
     ...overrides,
+  };
+}
+
+export const turnstileTestToken = 'turnstile-test-token';
+
+export function successfulTurnstileResponse(action, hostname = 'outcharity.com') {
+  return Response.json({ success: true, action, hostname });
+}
+
+export function turnstileAwareFetch(action, downstream) {
+  return async (url, options) => {
+    if (String(url) === 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+      return successfulTurnstileResponse(action);
+    }
+    return downstream(url, options);
   };
 }
 

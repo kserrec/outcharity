@@ -5,10 +5,12 @@ import test from 'node:test';
 import { getConfig } from '../src/config.js';
 import { hashToken } from '../src/domain.js';
 import { app } from '../src/index.js';
-import { helpPage, homePage, statsPage, submitPage, termsPage } from '../src/views.js';
+import { helpPage, homePage, managePage, statsPage, submitPage, termsPage } from '../src/views.js';
 import {
   configuredEnvironment as completeEnvironment,
   executionContext,
+  turnstileAwareFetch,
+  turnstileTestToken,
 } from './helpers/environment.js';
 import { pngBytes } from './helpers/images.js';
 
@@ -31,6 +33,8 @@ test('production configuration pins the approved live campaign', () => {
   assert.equal(deployment.vars.MIN_CONTRIBUTION_CENTS, '100');
   assert.equal(deployment.vars.MAX_CONTRIBUTION_CENTS, '10000000');
   assert.equal(deployment.vars.CHARITY_HOLD_DAYS, '30');
+  assert.equal(deployment.vars.TURNSTILE_SITE_KEY, '0x4AAAAAAEah2UPI8uOA8RYk');
+  assert.equal(deployment.vars.TURNSTILE_HOSTNAMES, 'outcharity.com');
   assert.equal(
     deployment.vars.CHARITY_DISCLOSURE,
     'Outcharity is not affiliated with or endorsed by St. Jude Children’s Research Hospital. Each payment purchases advertising and is not represented as a tax-deductible charitable gift by the advertiser. Of each gross payment, 90% is directed to St Jude Childrens Research Hospital through GoodAPI and 10% supports Outcharity. Outcharity separately absorbs payment-processing fees; those fees do not reduce the 90% charity allocation.',
@@ -49,6 +53,55 @@ test('the default contribution starts at the one-dollar minimum', () => {
   assert.match(document, /data-amount="1"/);
   assert.match(document, /name="amount"\s+value="1"/);
   assert.match(document, /Minimum \$1\./);
+});
+
+test('Turnstile is rendered only on the two approved checkout surfaces', () => {
+  const environment = completeEnvironment();
+  const config = getConfig(environment, environment.SITE_URL);
+  const advertiser = {
+    name: 'Managed Company',
+    total_contributed_cents: 3_200,
+    rank: 4,
+  };
+  const submitDocument = String(submitPage(config));
+  const manageDocument = String(managePage(config, advertiser, 'a'.repeat(64)));
+
+  for (const [document, action] of [
+    [submitDocument, 'new_checkout'],
+    [manageDocument, 'existing_checkout'],
+  ]) {
+    assert.match(
+      document,
+      /<script[\s\S]*?src="https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js"[\s\S]*?\basync\b[\s\S]*?\bdefer\b[\s\S]*?<\/script>/,
+    );
+    assert.match(document, /class="cf-turnstile"/);
+    assert.match(document, /data-sitekey="0x4AAAAAAA-test-site-key"/);
+    assert.match(document, new RegExp(`data-action="${action}"`));
+    assert.match(document, /data-size="flexible"/);
+    assert.equal((document.match(/class="cf-turnstile"/g) || []).length, 1);
+  }
+
+  assert.doesNotMatch(submitDocument, /data-action="existing_checkout"/);
+  assert.doesNotMatch(manageDocument, /data-action="new_checkout"/);
+
+  const closedEnvironment = completeEnvironment({ OUTCHARITY_LAUNCH_APPROVED: 'false' });
+  const closedConfig = getConfig(closedEnvironment, closedEnvironment.SITE_URL);
+  for (const document of [
+    String(homePage(config, {
+      advertisers: [],
+      recentPayments: [],
+      grossCents: 0,
+      charityCents: 0,
+      paymentCount: 0,
+      advertiserCount: 0,
+      visitCount: null,
+    })),
+    String(submitPage(closedConfig)),
+    String(managePage(closedConfig, advertiser, 'a'.repeat(64))),
+  ]) {
+    assert.doesNotMatch(document, /challenges\.cloudflare\.com/);
+    assert.doesNotMatch(document, /cf-turnstile/);
+  }
 });
 
 test('terms publish the approved refund and dispute promises', () => {
@@ -84,10 +137,31 @@ test('checkout cannot open without explicit approval and every required integrat
     'LOGOS',
     'CHECKOUT_RATE_LIMITER',
     'LOOKUP_RATE_LIMITER',
+    'TURNSTILE_SITE_KEY',
+    'TURNSTILE_SECRET',
+    'TURNSTILE_HOSTNAMES',
   ]) {
     const incomplete = completeEnvironment();
     delete incomplete[key];
     assert.equal(getConfig(incomplete, incomplete.SITE_URL).checkoutEnabled, false, key);
+  }
+
+  const config = getConfig(environment, environment.SITE_URL);
+  assert.equal(config.turnstileConfigured, true);
+  assert.deepEqual(config.turnstileHostnames, ['outcharity.com']);
+  assert.deepEqual(config.turnstileActions, {
+    newCheckout: 'new_checkout',
+    existingCheckout: 'existing_checkout',
+  });
+
+  for (const hostnames of [
+    'localhost',
+    'www.outcharity.com',
+    'outcharity.com,localhost',
+    'outcharity.com,www.outcharity.com',
+  ]) {
+    const mismatched = completeEnvironment({ TURNSTILE_HOSTNAMES: hostnames });
+    assert.equal(getConfig(mismatched, mismatched.SITE_URL).checkoutEnabled, false, hostnames);
   }
 
   const wrongAllocation = completeEnvironment();
@@ -172,7 +246,7 @@ test('both checkout routes honor the disabled launch gate before downstream work
 test('the new-listing route sends validated cents and matching fulfillment data to Stripe', async (context) => {
   const originalFetch = globalThis.fetch;
   let stripeRequest;
-  globalThis.fetch = async (url, options) => {
+  globalThis.fetch = turnstileAwareFetch('new_checkout', async (url, options) => {
     stripeRequest = { url: String(url), options };
     return new Response(
       JSON.stringify({
@@ -182,7 +256,7 @@ test('the new-listing route sends validated cents and matching fulfillment data 
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
-  };
+  });
   context.after(() => {
     globalThis.fetch = originalFetch;
   });
@@ -206,6 +280,7 @@ test('the new-listing route sends validated cents and matching fulfillment data 
   form.set('url', 'https://example.com');
   form.set('description', 'A complete route-to-Stripe integration test.');
   form.set('amount', '25.01');
+  form.set('cf-turnstile-response', turnstileTestToken);
   form.set(
     'logo',
     new File([pngBytes()], 'logo.png', {
@@ -276,7 +351,7 @@ test('the new-listing route sends validated cents and matching fulfillment data 
 test('the give-more route sends entered cents and the managed advertiser to Stripe', async (context) => {
   const originalFetch = globalThis.fetch;
   let stripeRequest;
-  globalThis.fetch = async (url, options) => {
+  globalThis.fetch = turnstileAwareFetch('existing_checkout', async (url, options) => {
     stripeRequest = { url: String(url), options };
     return new Response(
       JSON.stringify({
@@ -286,7 +361,7 @@ test('the give-more route sends entered cents and the managed advertiser to Stri
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
-  };
+  });
   context.after(() => {
     globalThis.fetch = originalFetch;
   });
@@ -330,7 +405,10 @@ test('the give-more route sends entered cents and the managed advertiser to Stri
     new Request(`https://outcharity.com/manage/${managementToken}/checkout`, {
       method: 'POST',
       headers: { Origin: 'https://outcharity.com' },
-      body: new URLSearchParams({ amount: '32.01' }),
+      body: new URLSearchParams({
+        amount: '32.01',
+        'cf-turnstile-response': turnstileTestToken,
+      }),
     }),
     environment,
     executionContext,
@@ -407,6 +485,14 @@ test('private management credentials stay out of page metadata, return through t
   assert.doesNotMatch(
     manageResponse.headers.get('Content-Security-Policy'),
     /static\.cloudflareinsights\.com/,
+  );
+  assert.match(
+    manageResponse.headers.get('Content-Security-Policy'),
+    /script-src 'self' https:\/\/challenges\.cloudflare\.com(?:;|$)/,
+  );
+  assert.match(
+    manageResponse.headers.get('Content-Security-Policy'),
+    /frame-src https:\/\/challenges\.cloudflare\.com(?:;|$)/,
   );
   assert.doesNotMatch(manageDocument, /rel="canonical"/);
   assert.doesNotMatch(manageDocument, /property="og:url"/);
@@ -1098,6 +1184,21 @@ test('outside local development only a live-mode Stripe key can open checkout', 
   );
   assert.equal(local.liveModeRequired, false);
   assert.equal(local.checkoutEnabled, true);
+  assert.deepEqual(local.turnstileHostnames, ['localhost']);
+
+  const localIp = getConfig(
+    completeEnvironment({ SITE_URL: 'http://127.0.0.1:8787' }),
+    'http://127.0.0.1:8787/',
+  );
+  assert.equal(localIp.checkoutEnabled, true);
+  assert.deepEqual(localIp.turnstileHostnames, ['127.0.0.1']);
+
+  const unregisteredLocalIpv6 = getConfig(
+    completeEnvironment({ SITE_URL: 'http://[::1]:8787' }),
+    'http://[::1]:8787/',
+  );
+  assert.equal(unregisteredLocalIpv6.checkoutEnabled, false);
+  assert.deepEqual(unregisteredLocalIpv6.turnstileHostnames, []);
 });
 
 test('the Terms state the hold window, finality after it, and no open-ended charity-cost promise', () => {
@@ -1113,11 +1214,11 @@ test('the Terms state the hold window, finality after it, and no open-ended char
 
 test('a failed Stripe session creation deletes the just-uploaded logo and reports a server error', async (context) => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () =>
+  globalThis.fetch = turnstileAwareFetch('new_checkout', async () =>
     new Response(JSON.stringify({ error: { message: 'Stripe is down' } }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
-    });
+    }));
   context.mock.method(console, 'error', () => {});
   context.after(() => {
     globalThis.fetch = originalFetch;
@@ -1140,6 +1241,7 @@ test('a failed Stripe session creation deletes the just-uploaded logo and report
   form.set('url', 'https://example.com');
   form.set('description', 'Stripe fails after the logo is stored.');
   form.set('amount', '25');
+  form.set('cf-turnstile-response', turnstileTestToken);
   form.set('logo', new File([pngBytes()], 'logo.png', { type: 'image/png' }));
 
   const response = await app.fetch(
@@ -1159,12 +1261,21 @@ test('a failed Stripe session creation deletes the just-uploaded logo and report
   assert.deepEqual(deleted, uploaded);
 });
 
-test('one invalid submission reports every invalid field together', async () => {
+test('one invalid submission reports every invalid field together', async (context) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = turnstileAwareFetch('new_checkout', async () => {
+    throw new Error('Stripe must not be reached for invalid form fields');
+  });
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
   const form = new FormData();
   form.set('name', '');
   form.set('url', 'not a url');
   form.set('description', 'ok');
   form.set('amount', '0.99');
+  form.set('cf-turnstile-response', turnstileTestToken);
   form.set('logo', new File([new TextEncoder().encode('not an image')], 'x.png', { type: 'image/png' }));
   const response = await app.fetch(
     new Request('https://outcharity.com/checkout', {
@@ -1188,6 +1299,7 @@ test('one invalid submission reports every invalid field together', async () => 
   logoOnly.set('url', 'https://example.com');
   logoOnly.set('description', 'ok');
   logoOnly.set('amount', '25');
+  logoOnly.set('cf-turnstile-response', turnstileTestToken);
   const logoResponse = await app.fetch(
     new Request('https://outcharity.com/checkout', {
       method: 'POST',

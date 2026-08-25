@@ -28,13 +28,32 @@ the same private email thread.
   IPv4 address or IPv6 /64 block and one shared checkout limit. The shared key limits aggregate
   R2 and Stripe work from distributed clients within each Cloudflare location. These Worker
   counters are permissive and eventually consistent, so they are a cost brake rather than exact
-  accounting or a replacement for pre-Worker filtering. The management credential is returned
-  to the browser only in a `__Host-` HttpOnly cookie, which the success and return pages read;
-  form posts never depend on it.
+  accounting or a replacement for pre-Worker filtering. Both checkout routes additionally require
+  a fresh Cloudflare Turnstile token before D1, R2, or Stripe work. The backend caps the token at
+  2,048 characters, gives Siteverify ten seconds, passes the connecting IP, and accepts only a
+  successful response with the exact route-specific action and approved hostname. Missing
+  Turnstile configuration closes checkout. The management credential is returned to the browser
+  only in a `__Host-` HttpOnly cookie, which the success and return pages read; form posts never
+  depend on it.
+- Cloudflare's zone-level rate-limiting phase blocks the sixth checkout-path request from one IP
+  within ten seconds for a ten-second mitigation period, before the Worker executes. One rule
+  covers `/checkout` and every `/manage/*/checkout` path and excludes the Stripe webhook and all
+  other paths. The Free plan cannot restrict the rule to POST, use NAT-aware counting, or share a
+  counter globally: all methods count, clients behind one public IP share its counter, counters are
+  per Cloudflare location, and Cloudflare may fail open during infrastructure overload. Turnstile
+  and the Worker-side limits therefore remain necessary.
 - Request bodies are capped while streaming; unreadable bodies are refused with 400.
 - Homepage and `/stats` database reads occur only on a five-second, query-independent Cache API
-  miss and share one aggregate lookup limit within each Cloudflare location. The Cache API saves
-  D1 work but still executes inside the Worker; it does not make those requests unbillable.
+  miss. Those misses, valid-looking success and management lookups, and uncached logo lookups share
+  one aggregate lookup limit within each Cloudflare location, in addition to the private routes'
+  per-client limits. The Cache API saves D1 and R2 work but still executes inside the Worker; it
+  does not make those requests unbillable.
+- Cloudflare's deployment API identifies the account as Workers Free. The platform therefore
+  enforces a fixed 10-millisecond CPU ceiling per invocation and a 100,000-request daily limit;
+  custom CPU limits are unsupported and rejected before deployment. These platform limits prevent
+  metered Workers request and CPU overages. D1 Free likewise stops queries at its daily row limits
+  instead of billing overages. R2 remains usage-priced after its monthly storage and operation free
+  tiers, so there is no hard account-wide bill cap.
 - Invalid Stripe webhook signatures return 400 without creating one application log entry per
   hostile request. Signed mode mismatches and fulfillment failures remain logged.
 - Outbound Stripe calls time out after 20 seconds with one retry; GoodAPI calls after 10 seconds.
@@ -87,15 +106,31 @@ the same private email thread.
    the money to the listing's rank total via trigger) and un-hides the listing by hand.
    Accepted 2026-08-21.
 
-## Open operational hardening
+## Operational hardening state
 
-- Turnstile on both checkout forms, a pre-Worker zone rate-limit rule, an evidence-based Worker
-  CPU ceiling, and billing notifications still require authenticated access to the Cloudflare
-  account. This session has no `CLOUDFLARE_API_TOKEN`; the repository changes therefore must not
-  be described as preventing every Worker invocation or guaranteeing a maximum bill.
+- The exact live zone is verified as the Free Website plan, and Cloudflare's deployment API
+  identifies the account as Workers Free. Its one pre-Worker rate-limit slot now protects both
+  checkout paths and has been proven live. Cloudflare Billing > Billable Usage now has an
+  account-wide `$1` early warning in addition to its auto-created `$10` alert. These alerts warn
+  after processed usage and are not a hard billing cap. A normal browser's fresh production
+  Turnstile token reached application validation, and immediate replay of the same token was
+  rejected. The currently identified Free-plan controls and validation checks are complete, but
+  this hardening must not be described as guaranteeing a maximum bill.
 
 ## Audit history
 
+- 2026-08-24 — denial-of-wallet hardening: added managed Turnstile with mandatory backend
+  verification to both checkout routes, shared checkout and lookup cost brakes, bounded public-data
+  caching with invalidation, and Free-plan deployment constraints. A fresh cold review proved that
+  the first ordering let invalid proofs consume the shared checkout brake; the shared brake was
+  moved after successful Turnstile verification, and a regression test reproduced the original
+  429 before passing the correction. All 93 tests and production smoke checks pass on Worker
+  version `948c2a32-d318-47de-bff3-8d16f727e0d9`. The previously empty Free-plan rate-limit slot
+  now has one checkout-only rule that passed Cloudflare dry-run validation, independent cold
+  review, API readback, encoded-path probes, a live five-allowed/two-edge-blocked threshold test,
+  and post-mitigation health checks. Live Turnstile and billing checks also passed: a fresh browser
+  token reached application validation, immediate replay was rejected, and account-wide `$1` and
+  `$10` informational alerts are present.
 - 2026-08-21 — full audit: live-mode-only production rule, logo dimension cap, IPv6 rate-limit
   buckets, invisible-character stripping, 400 on unreadable bodies, Stripe timeout, refund/dispute
   auto-hide with early-event suspensions, 30-day charity delivery hold, mandatory 3-D Secure,

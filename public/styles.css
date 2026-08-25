@@ -1133,6 +1133,12 @@ small,
   margin-top: 9px;
 }
 
+.checkout-verification,
+.cf-turnstile {
+  min-width: 0;
+  width: 100%;
+}
+
 .closed-panel,
 .management-link {
   margin-top: 42px;

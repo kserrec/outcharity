@@ -7,6 +7,11 @@ const STRIPE_MINIMUM_USD_CENTS = 50;
 const STRIPE_MAXIMUM_USD_CENTS = 99_999_999;
 const DEFAULT_CHARITY_HOLD_DAYS = 30;
 const MAX_CHARITY_HOLD_DAYS = 365;
+const LOCAL_TURNSTILE_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
+const TURNSTILE_ACTIONS = Object.freeze({
+  newCheckout: 'new_checkout',
+  existingCheckout: 'existing_checkout',
+});
 
 // The single reading of CHARITY_HOLD_DAYS shared by the Terms page and the scheduled delivery
 // task, so what the public is told and what the cron does can never diverge. Anything outside
@@ -61,6 +66,41 @@ function isLocalUrl(value) {
   } catch {
     return false;
   }
+}
+
+function getTurnstileConfig(env, requestOrigin) {
+  const requestHostname = new URL(requestOrigin).hostname;
+  const siteKey = String(env.TURNSTILE_SITE_KEY || '').trim();
+  const configuredHostnames = [
+    ...new Set(
+      String(env.TURNSTILE_HOSTNAMES || '')
+        .split(',')
+        .map((hostname) => hostname.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  let hostnames = [];
+  if (isLocalUrl(requestOrigin)) {
+    if (LOCAL_TURNSTILE_HOSTNAMES.has(requestHostname)) hostnames = [requestHostname];
+  } else if (
+    configuredHostnames.length === 1 &&
+    configuredHostnames[0] === requestHostname &&
+    !isLocalHostname(configuredHostnames[0])
+  ) {
+    hostnames = configuredHostnames;
+  }
+
+  return {
+    siteKey,
+    hostnames,
+    actions: TURNSTILE_ACTIONS,
+    configured: Boolean(
+      /^\S{1,256}$/.test(siteKey) &&
+        typeof env.TURNSTILE_SECRET === 'string' &&
+        /^\S+$/.test(env.TURNSTILE_SECRET) &&
+        hostnames.length > 0
+    ),
+  };
 }
 
 export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
@@ -172,8 +212,11 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET && env.GOODAPI_API_KEY,
   );
   const storageConfigured = Boolean(env.DB && env.LOGOS);
+  const turnstile = getTurnstileConfig(env, requestOrigin);
   const protectionConfigured = Boolean(
-    env.CHECKOUT_RATE_LIMITER?.limit && env.LOOKUP_RATE_LIMITER?.limit,
+    env.CHECKOUT_RATE_LIMITER?.limit &&
+      env.LOOKUP_RATE_LIMITER?.limit &&
+      turnstile.configured,
   );
   const deploymentConfigured = Boolean(
     siteUrl &&
@@ -202,6 +245,10 @@ export function getConfig(env, requestUrl = DEFAULT_SITE_URL) {
     charityEin,
     charityDisclosure,
     campaignHeadline,
+    turnstileSiteKey: turnstile.siteKey,
+    turnstileHostnames: turnstile.hostnames,
+    turnstileActions: turnstile.actions,
+    turnstileConfigured: turnstile.configured,
     launchApproved,
     campaignConfigured,
     paymentConfigured,

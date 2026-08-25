@@ -1,7 +1,10 @@
 import Stripe from 'stripe';
 
 const GOODAPI_BASE_URL = 'https://app.thegoodapi.com';
+const TURNSTILE_SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const STRIPE_REQUEST_TIMEOUT_MS = 20_000;
+const TURNSTILE_REQUEST_TIMEOUT_MS = 10_000;
+const TURNSTILE_TOKEN_MAX_LENGTH = 2_048;
 
 export function createStripeClient(secretKey) {
   return new Stripe(secretKey, {
@@ -73,6 +76,53 @@ export async function verifyStripeEvent(stripe, rawBody, signature, webhookSecre
     undefined,
     Stripe.createSubtleCryptoProvider(),
   );
+}
+
+export async function verifyTurnstileToken(
+  { token, secret, remoteIp, expectedAction, expectedHostnames },
+  fetcher = fetch,
+) {
+  const hostnames = new Set(
+    Array.isArray(expectedHostnames)
+      ? expectedHostnames.filter(
+          (hostname) => typeof hostname === 'string' && /^\S{1,253}$/.test(hostname),
+        )
+      : [],
+  );
+  if (
+    typeof token !== 'string' ||
+    !/^\S+$/.test(token) ||
+    token.length > TURNSTILE_TOKEN_MAX_LENGTH ||
+    typeof secret !== 'string' ||
+    !/^\S+$/.test(secret) ||
+    typeof expectedAction !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,32}$/.test(expectedAction) ||
+    hostnames.size === 0
+  ) {
+    return false;
+  }
+
+  const body = new URLSearchParams({ secret, response: token });
+  const clientAddress = typeof remoteIp === 'string' ? remoteIp.trim() : '';
+  if (clientAddress) body.set('remoteip', clientAddress.slice(0, 64));
+
+  try {
+    const response = await fetcher(TURNSTILE_SITEVERIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(TURNSTILE_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) return false;
+    const result = await response.json();
+    return (
+      result?.success === true &&
+      result.action === expectedAction &&
+      hostnames.has(result.hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function createGoodApiDonation(contribution, apiKey, fetcher = fetch) {

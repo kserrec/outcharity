@@ -1,4 +1,5 @@
 const ANALYTICS_SCRIPT_SOURCE = 'https://static.cloudflareinsights.com';
+const TURNSTILE_SOURCE = 'https://challenges.cloudflare.com';
 
 function contentSecurityPolicy({ allowAnalytics = true } = {}) {
   return [
@@ -8,9 +9,10 @@ function contentSecurityPolicy({ allowAnalytics = true } = {}) {
     "font-src 'self'",
     "form-action 'self' https://checkout.stripe.com",
     "frame-ancestors 'none'",
+    `frame-src ${TURNSTILE_SOURCE}`,
     "img-src 'self' data:",
     "object-src 'none'",
-    `script-src 'self'${allowAnalytics ? ` ${ANALYTICS_SCRIPT_SOURCE}` : ''}`,
+    `script-src 'self'${allowAnalytics ? ` ${ANALYTICS_SCRIPT_SOURCE}` : ''} ${TURNSTILE_SOURCE}`,
     "style-src 'self'",
   ].join('; ');
 }
