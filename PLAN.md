@@ -617,7 +617,17 @@ guarantee against every charge.
     is 4.83:1 for deep-cocoa text on the terracotta action color.
   - The final social preview is 1200 × 630 and 33,639 bytes, smaller than the prior 39,564-byte PNG;
     its exact wording, aspect ratio, and warm three-color system were visually inspected.
+- [x] Commit and push the release, deploy it to the production custom domain, and complete read-only
+  smoke checks without creating a Checkout Session or payment.
+  - Source commit `391231e` is on `origin/main`. Worker version
+    `dbab1369-88e8-4010-876f-3e0d1b9e9bfc` receives 100% of production traffic; version
+    `948c2a32-d318-47de-bff3-8d16f727e0d9` is the immediate rollback target.
+  - Live homepage, health, stats, Terms, submission, stylesheet, favicon, and social-preview GETs
+    return `200`; health reports checkout enabled, and the homepage, submission notice, and Terms
+    publish the current 95/5 allocation with the historical-allocation qualification.
+  - The deployed stylesheet, favicon, and social preview match the committed files byte for byte;
+    the homepage retains the expected CSP, HSTS, same-origin referrer policy, and frame denial.
 
-Exit: The local release candidate makes the current 95/5 promise exact from Checkout through
-delivery, preserves historical allocations truthfully, and presents the warmer visual identity at
-all public brand surfaces. Production deployment remains a separate explicit action.
+Exit: Production makes the current 95/5 promise exact from Checkout through delivery, preserves
+historical allocations truthfully, and presents the warmer visual identity at all public brand
+surfaces.
