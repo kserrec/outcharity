@@ -673,6 +673,9 @@ test('homepage elevates the top three and makes every listing a full-card websit
   assert.ok(restIndex < fourthIndex);
   assert.match(document, /class="listing-card listing-card-first" data-rank="1"/);
   assert.equal(document.match(/class="listing-hit-area"/g)?.length, advertisers.length);
+  assert.doesNotMatch(document, /The giving leaderboard/);
+  assert.doesNotMatch(document, /Ranked by confirmed contributions/);
+  assert.doesNotMatch(document, /Ties go to the listing that reached its total first\./);
 
   for (const advertiser of advertisers) {
     const hrefIndex = document.indexOf(`href="${advertiser.url}"`);
@@ -1098,12 +1101,29 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   assert.equal(prepareCalls, 1, 'the sitemap must not query D1');
 });
 
-test('the bright warm visual system preserves its palette, typography, and compact mobile entries', () => {
+test('the visual system reserves raspberry for actions and gives every listing visual weight', () => {
   const styles = readFileSync(new URL('../public/styles.css', import.meta.url), 'utf8');
   const mobileStart = styles.indexOf('@media (max-width: 760px)');
   const mobileEnd = styles.indexOf('@media (max-width: 350px)');
   const root = styles.match(/:root\s*\{([^}]*)\}/)?.[1] || '';
+  const desktopStyles = styles.slice(0, mobileStart);
   const mobileStyles = styles.slice(mobileStart, mobileEnd);
+  const desktopCard = desktopStyles.match(/\.listing-card\s*\{([^}]*)\}/)?.[1] || '';
+  const desktopFirstCard =
+    desktopStyles.match(/\.listing-card-first\s*\{([^}]*)\}/)?.[1] || '';
+  const desktopFirstSparkle =
+    desktopStyles.match(/\.listing-card-first::after\s*\{([^}]*)\}/)?.[1] || '';
+  const desktopLogo = desktopStyles.match(/\.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
+  const rankLabel = desktopStyles.match(/\.rank span\s*\{([^}]*)\}/)?.[1] || '';
+  const emptyBoard = desktopStyles.match(/\.empty-board\s*\{([^}]*)\}/)?.[1] || '';
+  const allocationPanel =
+    desktopStyles.match(/\.allocation-panel\s*\{([^}]*)\}/)?.[1] || '';
+  const featuredHelpCard =
+    desktopStyles.match(/\.help-card-featured\s*\{([^}]*)\}/)?.[1] || '';
+  const checkoutNotice =
+    desktopStyles.match(/\.checkout-notice\s*\{([^}]*)\}/)?.[1] || '';
+  const blockquote =
+    [...desktopStyles.matchAll(/\.prose blockquote\s*\{([^}]*)\}/g)].at(-1)?.[1] || '';
   const listingCard = mobileStyles.match(/\.listing-card\s*\{([^}]*)\}/)?.[1] || '';
   const firstCard = mobileStyles.match(/\.listing-card-first\s*\{([^}]*)\}/)?.[1] || '';
   const logo = mobileStyles.match(/\.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
@@ -1111,8 +1131,6 @@ test('the bright warm visual system preserves its palette, typography, and compa
     mobileStyles.match(/\.listing-card-first \.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
   const description = mobileStyles.match(/\.listing-copy p\s*\{([^}]*)\}/)?.[1] || '';
   const outbidLink = mobileStyles.match(/\.outbid-link\s*\{([^}]*)\}/)?.[1] || '';
-  const runnerLogo =
-    mobileStyles.match(/\.leader-runners \.listing-logo\s*\{([^}]*)\}/)?.[1] || '';
 
   for (const token of [
     '--ink: #153b3a',
@@ -1121,7 +1139,7 @@ test('the bright warm visual system preserves its palette, typography, and compa
     '--signal: #f47a91',
     '--signal-dark: #9d2748',
     '--sun: #f3c94f',
-    '--warm: #f9dce5',
+    '--highlight: #efb83e',
     '--muted: #536663',
     '--line: #a8bdb8',
     '--success: #16705a',
@@ -1133,23 +1151,48 @@ test('the bright warm visual system preserves its palette, typography, and compa
     assert.match(root, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 
-  assert.match(listingCard, /grid-template-columns:\s*32px 44px/);
-  assert.match(listingCard, /gap:\s*4px 7px/);
-  assert.match(listingCard, /padding:\s*8px/);
-  assert.match(firstCard, /grid-template-columns:\s*35px 50px/);
-  assert.match(firstCard, /padding:\s*9px/);
-  assert.match(logo, /width:\s*44px/);
-  assert.match(logo, /height:\s*44px/);
-  assert.match(firstLogo, /width:\s*50px/);
-  assert.match(firstLogo, /height:\s*50px/);
-  assert.match(description, /-webkit-line-clamp:\s*1/);
-  assert.match(outbidLink, /min-height:\s*30px/);
+  assert.match(desktopCard, /min-height:\s*152px/);
+  assert.match(desktopCard, /padding:\s*22px 24px/);
+  assert.match(desktopCard, /border:\s*2px solid var\(--ink\)/);
+  assert.match(desktopCard, /box-shadow:\s*4px 4px 0 var\(--shadow-strong\)/);
+  assert.match(desktopLogo, /width:\s*84px/);
+  assert.match(desktopLogo, /height:\s*84px/);
+  assert.match(desktopFirstCard, /min-height:\s*214px/);
+  assert.match(desktopFirstCard, /outline:\s*2px solid var\(--sun\)/);
+  assert.match(desktopFirstCard, /var\(--sun-soft\)/);
+  assert.match(desktopFirstCard, /var\(--paper\)/);
+  assert.match(desktopFirstCard, /box-shadow:\s*8px 8px 0 var\(--sun\)/);
+  assert.doesNotMatch(desktopFirstCard, /var\(--signal\)|var\(--warm\)/);
+  assert.match(desktopFirstSparkle, /content:\s*"✦"/);
+  assert.match(desktopFirstSparkle, /color:\s*var\(--highlight\)/);
+  assert.doesNotMatch(desktopFirstSparkle, /var\(--signal/);
+  assert.match(rankLabel, /color:\s*var\(--ink\)/);
+  assert.match(emptyBoard, /box-shadow:\s*5px 5px 0 var\(--sun\)/);
+  assert.doesNotMatch(emptyBoard, /var\(--signal\)|var\(--warm\)/);
+  assert.match(allocationPanel, /border-left:\s*4px solid var\(--highlight\)/);
+  assert.match(featuredHelpCard, /box-shadow:\s*4px 4px 0 var\(--sun\)/);
+  assert.doesNotMatch(featuredHelpCard, /var\(--signal\)|var\(--warm\)/);
+  assert.match(checkoutNotice, /border-left:\s*5px solid var\(--highlight\)/);
+  assert.match(blockquote, /border-left:\s*7px solid var\(--highlight\)/);
+  assert.equal(styles.match(/var\(--signal\)/g)?.length, 2);
+  assert.doesNotMatch(root, /--warm(?:-hover)?:/);
+
+  assert.match(listingCard, /grid-template-columns:\s*38px 54px/);
+  assert.match(listingCard, /gap:\s*7px 10px/);
+  assert.match(listingCard, /padding:\s*12px/);
+  assert.match(firstCard, /grid-template-columns:\s*44px 64px/);
+  assert.match(firstCard, /padding:\s*15px 13px/);
+  assert.match(logo, /width:\s*54px/);
+  assert.match(logo, /height:\s*54px/);
+  assert.match(firstLogo, /width:\s*64px/);
+  assert.match(firstLogo, /height:\s*64px/);
+  assert.match(description, /-webkit-line-clamp:\s*2/);
+  assert.match(outbidLink, /min-height:\s*36px/);
   assert.match(
     mobileStyles,
     /\.leader-runners\s*\{\s*grid-template-columns:\s*minmax\(0,\s*1fr\)/,
   );
-  assert.match(runnerLogo, /width:\s*36px/);
-  assert.match(runnerLogo, /height:\s*36px/);
+  assert.doesNotMatch(mobileStyles, /\.leader-runners \.listing-logo\s*\{/);
 });
 
 test('locked empty homepage makes the open top spot prominent without implying checkout is open', () => {

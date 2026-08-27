@@ -256,7 +256,6 @@ export function homePage(config, data) {
     <main class="home-main">
       <section class="campaign-mast shell" aria-labelledby="campaign-title">
         <div class="campaign-copy">
-          <p class="home-eyebrow">The giving leaderboard</p>
           <h1 id="campaign-title">
             ${config.publicCampaign ? config.campaignHeadline : 'Advertise by giving.'}
           </h1>
@@ -280,11 +279,7 @@ export function homePage(config, data) {
 
       <section class="leaderboard shell" aria-labelledby="leaderboard-title">
         <div class="board-heading">
-          <div>
-            <p class="board-kicker">Ranked by confirmed contributions</p>
-            <h2 id="leaderboard-title">Leaderboard</h2>
-          </div>
-          <p>Ties go to the listing that reached its total first.</p>
+          <h2 id="leaderboard-title">Leaderboard</h2>
         </div>
         <p class="founder-seed-note">Founder seed - $100 donated to kick off the board</p>
         ${board.length > 0
