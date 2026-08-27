@@ -707,3 +707,50 @@ typography, layout, content, payment behavior, or production configuration.
 Exit: New social scrapes use content-addressed preview bytes, public HTML cannot be reused without
 revalidation, and Outcharity has a fresh share URL for platforms whose independent cache still
 holds the former base-URL card.
+
+## Phase 15 — Search and AI discoverability
+
+Verified starting state, 2026-08-27:
+
+- The public pages already render HTML on the server with titles, descriptions, canonical URLs,
+  Open Graph and X metadata. Public `robots.txt` allows ordinary search crawling and names the
+  sitemap, which currently lists the homepage, Stats, Help, About, Terms, and Privacy pages.
+- The homepage title is `Outcharity — Advertise by Giving`, its H1 is the brand line “Give and
+  Grow.”, and the visible introduction does not define Outcharity as a charity-funded or
+  pay-to-rank advertising leaderboard. The About page has one descriptive paragraph.
+- No Schema.org JSON-LD exists. No dedicated St. Jude campaign URL exists. `/submit` currently has
+  a canonical URL and no robots exclusion, while `/health` returns JSON without an
+  `X-Robots-Tag` exclusion.
+- The unchanged baseline passes all 96 tests. The worktree is clean at commit `567568b`.
+
+- [x] Make the homepage title, description, H1, and visible introduction state what Outcharity is
+  in natural language: a charity-funded, pay-to-rank advertising leaderboard where businesses
+  outbid one another for visibility by giving more.
+- [x] Add valid `WebSite` structured data to the homepage, expand About into a durable product
+  explanation, and give every edited public page a specific description without claiming a
+  search-engine ranking, charity endorsement, tax-deductible gift, or independently observed bank
+  receipt.
+- [x] Create a permanent, server-rendered `/campaigns/st-jude` page for the campaign launched in
+  August 2026. Explain the current allocation, ranking mechanism, verification hold, GoodAPI's
+  narrow role, non-affiliation, public evidence, and direct-help alternative; link it internally
+  and add it to the sitemap.
+- [x] Keep transactional and machine-only surfaces out of search results: render `/submit` with
+  `noindex,follow` and no canonical or Open Graph URL, and send an `X-Robots-Tag` exclusion on
+  `/health`. Do not disallow either path in `robots.txt`, because crawlers must be able to receive
+  those page-level directives.
+- [x] Add focused view and route regression coverage, then run the full test suite, syntax check,
+  dotenv-isolated dry production build, and diff check. Add no package, migration, browser-side
+  script, analytics surface, external account change, deployment, `llms.txt`, or change to
+  Cloudflare's existing AI-training permissions.
+  - Four focused metadata, content, crawl-directive, route, and sitemap tests pass. The complete
+    suite passes all 99 tests, `npm run check` passes, `git diff --check` passes, and Wrangler
+    4.125.0 completes the `/dev/null` environment-file dry production build at 863.67 KiB raw /
+    124.87 KiB compressed without uploading a Worker.
+  - The executable diff changes only `src/views.js` and `src/index.js`; test coverage changes only
+    `test/config-and-views.test.js`; this phase record is the only documentation change. Public
+    styles and assets, `robots.txt`, packages, deployment configuration, D1 migrations, payment and
+    provider behavior, and every external service remain unchanged.
+
+Exit: Search engines and answer engines can crawl a specific, internally linked explanation of
+Outcharity and its St. Jude campaign, while purchase and health utility URLs are excluded from
+results and every public claim remains bounded by the product's recorded evidence.

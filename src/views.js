@@ -1,11 +1,25 @@
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import { amountInputValue, displayHost, formatMoney } from './domain.js';
 
 const SITE_DESCRIPTION =
-  'Businesses compete for the top spot by giving to charity. Rank is determined by confirmed lifetime contributions.';
+  'Outcharity is a charity-funded, pay-to-rank advertising leaderboard where businesses outbid one another for visibility by giving more.';
+const HOME_TITLE = 'Outcharity — Charity-Funded Advertising Leaderboard';
 const SOCIAL_PREVIEW_IMAGE_PATH = '/og-3ed4f5f4.png';
 const SOCIAL_PREVIEW_IMAGE_ALT =
   'Outcharity — Advertise by giving. More given equals higher rank.';
+
+function websiteStructuredData(config) {
+  return JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': `${config.siteUrl}/#website`,
+    url: config.siteUrl,
+    name: 'Outcharity',
+    alternateName: 'Outcharity.com',
+    description: SITE_DESCRIPTION,
+    inLanguage: 'en-US',
+  }).replaceAll('<', '\\u003c');
+}
 
 function page(
   config,
@@ -15,12 +29,22 @@ function page(
     path = '/',
     body,
     privatePage = false,
+    indexable = true,
     turnstile = false,
   },
 ) {
-  const fullTitle = title === 'Outcharity' ? 'Outcharity — Advertise by Giving' : `${title} — Outcharity`;
+  const fullTitle = title === 'Outcharity' ? HOME_TITLE : `${title} — Outcharity`;
   const canonical = `${config.siteUrl}${path === '/' ? '' : path}`;
   const previewImage = `${config.siteUrl}${SOCIAL_PREVIEW_IMAGE_PATH}`;
+  const robotsDirective = privatePage
+    ? 'noindex,nofollow,noarchive'
+    : indexable
+      ? ''
+      : 'noindex,follow';
+  const homepageStructuredData =
+    title === 'Outcharity' && path === '/' && !privatePage && indexable
+      ? websiteStructuredData(config)
+      : '';
 
   return html`<!doctype html>
     <html lang="en">
@@ -29,8 +53,8 @@ function page(
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>${fullTitle}</title>
         <meta name="description" content="${description}" />
-        ${privatePage
-          ? html`<meta name="robots" content="noindex,nofollow,noarchive" />`
+        ${robotsDirective
+          ? html`<meta name="robots" content="${robotsDirective}" />`
           : html`<link rel="canonical" href="${canonical}" />`}
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/styles.css" />
@@ -38,7 +62,7 @@ function page(
         <meta property="og:site_name" content="Outcharity" />
         <meta property="og:title" content="${fullTitle}" />
         <meta property="og:description" content="${description}" />
-        ${privatePage ? '' : html`<meta property="og:url" content="${canonical}" />`}
+        ${privatePage || !indexable ? '' : html`<meta property="og:url" content="${canonical}" />`}
         <meta property="og:image" content="${previewImage}" />
         <meta property="og:image:secure_url" content="${previewImage}" />
         <meta property="og:image:type" content="image/png" />
@@ -50,6 +74,9 @@ function page(
         <meta name="twitter:description" content="${description}" />
         <meta name="twitter:image" content="${previewImage}" />
         <meta name="twitter:image:alt" content="${SOCIAL_PREVIEW_IMAGE_ALT}" />
+        ${homepageStructuredData
+          ? html`<script type="application/ld+json">${raw(homepageStructuredData)}</script>`
+          : ''}
         ${turnstile
           ? html`<script
               src="https://challenges.cloudflare.com/turnstile/v0/api.js"
@@ -64,6 +91,7 @@ function page(
           <a href="/">Outcharity</a>
           <nav aria-label="Legal and project information">
             <a href="/stats">Stats</a>
+            <a href="/campaigns/st-jude">Campaign</a>
             <a href="/help">Help more</a>
             <a href="/about">About</a>
             <a href="/terms">Terms</a>
@@ -93,20 +121,21 @@ function homeStat(value, label) {
   </li>`;
 }
 
+function publicCharityName(config) {
+  // GoodAPI's directory record omits the published punctuation. Keep that exact value for
+  // payment and donation metadata while using the charity's published name in public copy.
+  return config.charityName === 'St Jude Childrens Research Hospital'
+    ? "St. Jude Children's Research Hospital"
+    : config.charityName;
+}
+
 function homeAllocationBanner(config) {
   if (!config.publicCampaign) return '';
-
-  // GoodAPI's directory record omits the apostrophe. Keep that exact value for payment and
-  // donation metadata while correcting the charity's name in the public banner.
-  const headerCharityName =
-    config.charityName === 'St Jude Childrens Research Hospital'
-      ? "St Jude Children's Research Hospital"
-      : config.charityName;
 
   return html`<aside class="home-allocation-banner" aria-label="Charity allocation">
     <p class="shell">
       Each new checkout sends <strong>${config.charityPercentage}%</strong> of its contribution to
-      <a href="${config.charityUrl}" target="_blank" rel="noopener">${headerCharityName}</a>.
+      <a href="${config.charityUrl}" target="_blank" rel="noopener">${publicCharityName(config)}</a>.
     </p>
   </aside>`;
 }
@@ -161,7 +190,7 @@ function allocationStatement(config, { compact = false } = {}) {
 
   return html`<p class="${compact ? 'fine-print' : 'allocation'}">
     Each new checkout sends <strong>${config.charityPercentage}%</strong> of its contribution to
-    <a href="${config.charityUrl}" target="_blank" rel="noopener">${config.charityName}</a>.
+    <a href="${config.charityUrl}" target="_blank" rel="noopener">${publicCharityName(config)}</a>.
     The remaining ${config.platformPercentage}% keeps Outcharity running. Payment-processing fees
     do not reduce the charity amount. Earlier checkout sessions and completed contributions retain
     the allocation recorded when checkout began.
@@ -256,10 +285,15 @@ export function homePage(config, data) {
     <main class="home-main">
       <section class="campaign-mast shell" aria-labelledby="campaign-title">
         <div class="campaign-copy">
-          <h1 id="campaign-title">
+          <p class="eyebrow">
             ${config.publicCampaign ? config.campaignHeadline : 'Advertise by giving.'}
-          </h1>
-          <p class="campaign-deck">Give more. Rank higher. Get seen.</p>
+          </p>
+          <h1 id="campaign-title">The charity-funded advertising leaderboard.</h1>
+          <p class="campaign-deck">
+            Businesses outbid one another for visibility by giving more—an advertising competition
+            designed to do good.
+            <a href="/campaigns/st-jude">How the St. Jude campaign works.</a>
+          </p>
         </div>
         <div class="campaign-status" aria-label="Campaign status">
           <p class="campaign-total">
@@ -389,6 +423,8 @@ export function statsPage(config, stats) {
       <p class="page-intro">
         A current aggregate view of confirmed payments and recorded website visits. Refunded or
         disputed payments are excluded, and individual transactions or visits are not published.
+        Read the <a href="/campaigns/st-jude">St. Jude campaign explanation</a> for the ranking,
+        allocation, and delivery process behind these totals.
       </p>
       <dl class="stats-grid">${cards}</dl>
       <section class="delivery-ledger" aria-labelledby="delivery-ledger-title">
@@ -585,8 +621,10 @@ export function submitPage(config, { values = {}, errors = {}, message = '' } = 
 
   return page(config, {
     title: 'Get on the board',
+    description: 'Purchase an Outcharity leaderboard listing and choose its contribution amount.',
     path: '/submit',
     body,
+    indexable: false,
     turnstile: config.checkoutEnabled,
   });
 }
@@ -818,19 +856,128 @@ export function helpPage(config) {
   });
 }
 
+export function campaignPage(config) {
+  const charityName = publicCharityName(config);
+  const body = html`${brandHeader()}
+    <main class="narrow-shell prose page-main campaign-page">
+      <p class="eyebrow">
+        Featured campaign · launched <time datetime="2026-08">August 2026</time>
+      </p>
+      <h1>Advertising that supports ${charityName}.</h1>
+      <p class="page-intro">
+        Outcharity’s current campaign turns pay-to-rank advertising payments into a recorded
+        charity allocation. Businesses compete for visibility while most of each new payment is
+        set aside for ${charityName}.
+      </p>
+
+      <h2>How the advertising leaderboard works</h2>
+      <p>
+        A business purchases a public listing. Rank is determined by its confirmed cumulative
+        gross payments: giving more moves the listing higher, so businesses can outbid one another
+        for the most visible positions. If two listings have the same total, the listing that
+        reached that total first stays ahead. Positions do not expire, but they can change whenever
+        another confirmed payment changes the order.
+      </p>
+      <p>
+        The payment purchases advertising. It is not represented as a tax-deductible charitable
+        gift made by the advertiser.
+      </p>
+
+      <h2>Where each payment goes</h2>
+      ${allocationStatement(config)}
+
+      <h2>How delivery is recorded</h2>
+      <p>
+        Outcharity records the charity share when Stripe confirms the payment, then waits
+        ${config.charityHoldDays} days before sending an eligible share through GoodAPI. A refund
+        or dispute before provider acceptance stops that delivery. GoodAPI acceptance means the
+        provider returned a donation record; it does not mean Outcharity independently observed
+        the charity’s bank receipt.
+      </p>
+      <p>
+        The public <a href="/stats">campaign stats and delivery ledger</a> report aggregate paid,
+        allocated, awaiting, accepted, and stopped amounts without publishing an individual
+        transaction or provider identifier.
+      </p>
+
+      <h2>An independent campaign</h2>
+      <p>
+        Outcharity is not affiliated with or endorsed by ${charityName}. The charity name
+        identifies the organization selected for this campaign; it does not imply sponsorship or
+        approval of Outcharity or any advertiser on the leaderboard.
+      </p>
+      <p>
+        Visitors who want to support the charity without buying advertising can use
+        <a
+          href="https://www.stjude.org/donate/donate-to-st-jude.html"
+          target="_blank"
+          rel="noopener noreferrer"
+        >St. Jude’s official donation page</a>. That is a plain external link: Outcharity does not
+        process or observe the outside action.
+        The <a href="/help">More ways to help page</a> also lists independent research and
+        non-monetary options.
+      </p>
+      <a class="text-link" href="/">Back to the leaderboard</a>
+    </main>`;
+
+  return page(config, {
+    title: 'St. Jude campaign',
+    description:
+      'How Outcharity’s charity-funded advertising campaign supports St. Jude Children’s Research Hospital, including ranking, allocation, and public records.',
+    path: '/campaigns/st-jude',
+    body,
+  });
+}
+
 export function aboutPage(config) {
   const body = html`${brandHeader()}
     <main class="narrow-shell prose page-main">
-      <h1>One weird advertising market.</h1>
-      <p>
-        Outcharity is a public leaderboard. Businesses buy attention by contributing toward one
-        featured charity. More confirmed money means a higher position. There are no scores,
-        targeting systems, or expiring bids.
+      <h1>How Outcharity works.</h1>
+      <p class="page-intro">
+        Outcharity is a charity-funded, pay-to-rank advertising leaderboard. Businesses compete
+        for attention by making confirmed payments, and most of each new payment supports the
+        featured charity.
       </p>
-      <blockquote>Want more attention? Give more money to charity.</blockquote>
+
+      <h2>The ranking</h2>
+      <p>
+        Each business has one public listing. Listings are ordered by confirmed cumulative gross
+        payments, so a business can move higher by giving more and can outbid the listing above it.
+        If totals tie, the business that reached its current total first stays ahead. There are no
+        audience-targeting scores or expiring positions.
+      </p>
+
+      <h2>What a business buys</h2>
+      <p>
+        A payment buys visibility on the leaderboard. It is advertising, not a donation made
+        directly by the advertiser, and Outcharity does not represent it as tax-deductible. The
+        listing’s logo, name, description, link, rank, and confirmed gross total are public.
+      </p>
+
+      <h2>How charity fits in</h2>
       ${allocationStatement(config)}
+      <p>
+        The permanent <a href="/campaigns/st-jude">St. Jude campaign page</a> explains the current
+        allocation, verification hold, provider record, non-affiliation, and direct-help option in
+        one place.
+      </p>
+
+      <h2>What anyone can verify</h2>
+      <p>
+        The <a href="/stats">public stats page</a> publishes aggregate payment, allocation, and
+        delivery status. The <a href="/terms">Terms</a> define the product and refund rules. Neither
+        page exposes individual payment or provider identifiers.
+      </p>
+
+      <blockquote>Want more attention? Give more money to charity.</blockquote>
     </main>`;
-  return page(config, { title: 'About', path: '/about', body });
+  return page(config, {
+    title: 'About',
+    description:
+      'How Outcharity’s pay-to-rank advertising leaderboard works, what businesses buy, and how confirmed payments support its featured charity.',
+    path: '/about',
+    body,
+  });
 }
 
 export function termsPage(config) {
@@ -887,7 +1034,13 @@ export function termsPage(config) {
       </p>
       <p>Questions: <a href="mailto:hello@outcharity.com">hello@outcharity.com</a></p>
     </main>`;
-  return page(config, { title: 'Terms', path: '/terms', body });
+  return page(config, {
+    title: 'Terms',
+    description:
+      'Terms for Outcharity leaderboard advertising, including ranking, charity allocation, listings, refunds, and payment disputes.',
+    path: '/terms',
+    body,
+  });
 }
 
 export function privacyPage(config) {
@@ -912,7 +1065,13 @@ export function privacyPage(config) {
       </p>
       <p>Privacy questions: <a href="mailto:hello@outcharity.com">hello@outcharity.com</a></p>
     </main>`;
-  return page(config, { title: 'Privacy', path: '/privacy', body });
+  return page(config, {
+    title: 'Privacy',
+    description:
+      'What Outcharity stores, publishes, and shares when operating its advertising leaderboard and charity-delivery records.',
+    path: '/privacy',
+    body,
+  });
 }
 
 export function messagePage(config, { title, heading, message, status = 400 }) {

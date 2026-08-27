@@ -59,6 +59,7 @@ import {
 } from './providers.js';
 import {
   aboutPage,
+  campaignPage,
   helpPage,
   homePage,
   managePage,
@@ -276,6 +277,7 @@ app.get('/submit', (context) => {
       // Invalid prefill values fall back to the configured minimum.
     }
   }
+  context.header('X-Robots-Tag', 'noindex, follow');
   return htmlResponse(context, submitPage(config, { values: { amount } }));
 });
 
@@ -599,6 +601,9 @@ app.get('/logos/*', async (context) => {
   return response;
 });
 
+app.get('/campaigns/st-jude', (context) =>
+  htmlResponse(context, campaignPage(configFor(context))),
+);
 app.get('/about', (context) => htmlResponse(context, aboutPage(configFor(context))));
 app.get('/help', (context) => htmlResponse(context, helpPage(configFor(context))));
 app.get('/stats', async (context) => {
@@ -643,14 +648,21 @@ app.get('/health', (context) => {
     checkoutEnabled: config.checkoutEnabled,
   });
   response.headers.set('Cache-Control', 'no-store');
+  response.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive');
   return response;
 });
 
 app.get('/sitemap.xml', (context) => {
   const config = configFor(context);
-  const urls = ['/', '/stats', '/help', '/about', '/terms', '/privacy'].map(
-    (path) => `<url><loc>${config.siteUrl}${path === '/' ? '' : path}</loc></url>`,
-  );
+  const urls = [
+    '/',
+    '/campaigns/st-jude',
+    '/stats',
+    '/help',
+    '/about',
+    '/terms',
+    '/privacy',
+  ].map((path) => `<url><loc>${config.siteUrl}${path === '/' ? '' : path}</loc></url>`);
   return context.body(
     `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.join('')}</urlset>`,
     200,

@@ -6,7 +6,17 @@ import test from 'node:test';
 import { getConfig } from '../src/config.js';
 import { hashToken } from '../src/domain.js';
 import { app } from '../src/index.js';
-import { helpPage, homePage, managePage, statsPage, submitPage, termsPage } from '../src/views.js';
+import {
+  aboutPage,
+  campaignPage,
+  helpPage,
+  homePage,
+  managePage,
+  privacyPage,
+  statsPage,
+  submitPage,
+  termsPage,
+} from '../src/views.js';
 import {
   configuredEnvironment as completeEnvironment,
   executionContext,
@@ -101,6 +111,96 @@ test('social preview metadata uses the current content-fingerprinted image', () 
   );
 });
 
+test('homepage publishes descriptive search metadata and valid WebSite structured data', () => {
+  const environment = completeEnvironment({ CAMPAIGN_HEADLINE: 'Give and Grow.' });
+  const config = getConfig(environment, environment.SITE_URL);
+  const document = String(
+    homePage(config, {
+      advertisers: [],
+      recentPayments: [],
+      grossCents: 0,
+      charityCents: 0,
+      paymentCount: 0,
+      advertiserCount: 0,
+      visitCount: null,
+    }),
+  );
+  const description =
+    'Outcharity is a charity-funded, pay-to-rank advertising leaderboard where businesses outbid one another for visibility by giving more.';
+  const structuredDataMatches = [
+    ...document.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g),
+  ];
+
+  assert.match(
+    document,
+    /<title>Outcharity — Charity-Funded Advertising Leaderboard<\/title>/,
+  );
+  assert.ok(document.includes(`<meta name="description" content="${description}" />`));
+  assert.match(document, /<p class="eyebrow">\s*Give and Grow\.\s*<\/p>/);
+  assert.match(
+    document,
+    /<h1 id="campaign-title">The charity-funded advertising leaderboard\.<\/h1>/,
+  );
+  assert.match(document, /Businesses outbid one another for visibility by giving more/);
+  assert.match(document, /href="\/campaigns\/st-jude">How the St\. Jude campaign works/);
+  assert.equal(structuredDataMatches.length, 1);
+  assert.deepEqual(JSON.parse(structuredDataMatches[0][1]), {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    '@id': 'https://outcharity.com/#website',
+    url: 'https://outcharity.com',
+    name: 'Outcharity',
+    alternateName: 'Outcharity.com',
+    description,
+    inLanguage: 'en-US',
+  });
+  assert.doesNotMatch(String(aboutPage(config)), /application\/ld\+json/);
+});
+
+test('About and campaign pages explain the product with distinct search descriptions', () => {
+  const environment = completeEnvironment({
+    CHARITY_NAME: 'St Jude Childrens Research Hospital',
+    CHARITY_URL: 'https://www.stjude.org',
+  });
+  const config = getConfig(environment, environment.SITE_URL);
+  const aboutDocument = String(aboutPage(config));
+  const campaignDocument = String(campaignPage(config));
+  const termsDocument = String(termsPage(config));
+  const privacyDocument = String(privacyPage(config));
+  const descriptions = [aboutDocument, campaignDocument, termsDocument, privacyDocument].map(
+    (document) => document.match(/<meta name="description" content="([^"]+)" \/>/)?.[1],
+  );
+
+  assert.equal(new Set(descriptions).size, descriptions.length);
+  for (const description of descriptions) {
+    assert.ok(description && description.length >= 100 && description.length <= 160, description);
+  }
+
+  assert.match(aboutDocument, /<h1>How Outcharity works\.<\/h1>/);
+  assert.match(aboutDocument, /charity-funded, pay-to-rank advertising leaderboard/);
+  assert.match(aboutDocument, /can outbid the listing above it/);
+  assert.match(aboutDocument, /reached its current total first stays ahead/);
+  assert.match(aboutDocument, /href="\/campaigns\/st-jude">St\. Jude campaign page/);
+
+  assert.match(
+    campaignDocument,
+    /<link rel="canonical" href="https:\/\/outcharity\.com\/campaigns\/st-jude"/,
+  );
+  assert.match(campaignDocument, /datetime="2026-08">August 2026/);
+  assert.match(campaignDocument, /Advertising that supports St\. Jude Children&#39;s Research Hospital/);
+  assert.match(campaignDocument, /current campaign turns pay-to-rank advertising payments/);
+  assert.match(campaignDocument, /Each new checkout sends <strong>95%<\/strong>/);
+  assert.match(campaignDocument, /waits\s+30 days before sending an eligible share through GoodAPI/);
+  assert.match(campaignDocument, /provider returned a donation record/);
+  assert.match(campaignDocument, /does not mean Outcharity independently observed/);
+  assert.match(campaignDocument, /not affiliated with or endorsed by/);
+  assert.match(campaignDocument, /not represented as a tax-deductible charitable\s+gift/);
+  assert.match(
+    campaignDocument,
+    /href="https:\/\/www\.stjude\.org\/donate\/donate-to-st-jude\.html"[\s\S]*?target="_blank"[\s\S]*?rel="noopener noreferrer"/,
+  );
+});
+
 test('Turnstile is rendered only on the two approved checkout surfaces', () => {
   const environment = completeEnvironment();
   const config = getConfig(environment, environment.SITE_URL);
@@ -148,6 +248,41 @@ test('Turnstile is rendered only on the two approved checkout surfaces', () => {
     assert.doesNotMatch(document, /challenges\.cloudflare\.com/);
     assert.doesNotMatch(document, /cf-turnstile/);
   }
+});
+
+test('transactional and machine-only routes tell crawlers not to index them', async () => {
+  const environment = completeEnvironment();
+  const submitResponse = await app.fetch(
+    new Request('https://outcharity.com/submit'),
+    environment,
+    executionContext,
+  );
+  const submitDocument = await submitResponse.text();
+
+  assert.equal(submitResponse.status, 200);
+  assert.equal(submitResponse.headers.get('X-Robots-Tag'), 'noindex, follow');
+  assert.match(submitDocument, /<meta name="robots" content="noindex,follow" \/>/);
+  assert.doesNotMatch(submitDocument, /rel="canonical"/);
+  assert.doesNotMatch(submitDocument, /property="og:url"/);
+
+  const healthResponse = await app.fetch(
+    new Request('https://outcharity.com/health'),
+    environment,
+    executionContext,
+  );
+  assert.equal(healthResponse.status, 200);
+  assert.equal(
+    healthResponse.headers.get('X-Robots-Tag'),
+    'noindex, nofollow, noarchive',
+  );
+
+  const sitemapResponse = await app.fetch(
+    new Request('https://outcharity.com/sitemap.xml'),
+    environment,
+    executionContext,
+  );
+  const sitemapDocument = await sitemapResponse.text();
+  assert.doesNotMatch(sitemapDocument, /<loc>[^<]+\/(?:submit|health)<\/loc>/);
 });
 
 test('terms publish the approved refund and dispute promises', () => {
@@ -627,7 +762,7 @@ test('server-rendered listings escape advertiser-controlled HTML', () => {
   assert.doesNotMatch(document, /<img src=x onerror/);
   assert.match(document, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(document, /&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.match(document, /content="Outcharity — Advertise by Giving"/);
+  assert.match(document, /content="Outcharity — Charity-Funded Advertising Leaderboard"/);
   assert.match(document, /href="https:\/\/example\.com\/\?value=&lt;unsafe&gt;"/);
   assert.match(document, /src="\/logos\/11111111-1111-4111-8111-111111111111\.png"/);
   assert.doesNotMatch(document, /\/logos\/logos\//);
@@ -772,7 +907,7 @@ test('homepage leads with the charity allocation on desktop and mobile', () => {
   assert.ok(statsIndex < headerIndex && headerIndex < mainIndex);
   assert.match(banner, /Each new checkout sends <strong>95%<\/strong> of its contribution to/);
   assert.match(banner, /href="https:\/\/www\.stjude\.org"/);
-  assert.match(banner, />St Jude Children&#39;s Research Hospital<\/a>/);
+  assert.match(banner, />St\. Jude Children&#39;s Research Hospital<\/a>/);
   assert.doesNotMatch(banner, /Childrens/);
   assert.match(banner, /aria-label="Charity allocation"/);
 
@@ -1030,7 +1165,7 @@ test('the help page offers verified outside paths without tracking or changing p
   assert.match(mobileHelpGrid, /grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 });
 
-test('the help and stats routes are public, canonical, and listed in the sitemap', async () => {
+test('the help, campaign, and stats routes are public, canonical, and listed in the sitemap', async () => {
   let prepareCalls = 0;
   const environment = completeEnvironment({
     DB: {
@@ -1068,6 +1203,22 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   assert.match(helpDocument, /<link rel="canonical" href="https:\/\/outcharity\.com\/help"/);
   assert.match(helpDocument, /Support St\. Jude directly/);
 
+  const campaignResponse = await app.fetch(
+    new Request('https://outcharity.com/campaigns/st-jude'),
+    environment,
+    executionContext,
+  );
+  const campaignDocument = await campaignResponse.text();
+
+  assert.equal(campaignResponse.status, 200);
+  assert.equal(campaignResponse.headers.get('Cache-Control'), 'no-store');
+  assert.equal(prepareCalls, 0, 'the campaign page must not query D1');
+  assert.match(
+    campaignDocument,
+    /<link rel="canonical" href="https:\/\/outcharity\.com\/campaigns\/st-jude"/,
+  );
+  assert.match(campaignDocument, /How the advertising leaderboard works/);
+
   const response = await app.fetch(
     new Request('https://outcharity.com/stats'),
     environment,
@@ -1096,6 +1247,7 @@ test('the help and stats routes are public, canonical, and listed in the sitemap
   );
   const sitemapDocument = await sitemapResponse.text();
   assert.equal(sitemapResponse.status, 200);
+  assert.match(sitemapDocument, /<loc>https:\/\/outcharity\.com\/campaigns\/st-jude<\/loc>/);
   assert.match(sitemapDocument, /<loc>https:\/\/outcharity\.com\/stats<\/loc>/);
   assert.match(sitemapDocument, /<loc>https:\/\/outcharity\.com\/help<\/loc>/);
   assert.equal(prepareCalls, 1, 'the sitemap must not query D1');
