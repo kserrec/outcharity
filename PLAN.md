@@ -750,6 +750,20 @@ Verified starting state, 2026-08-27:
     `test/config-and-views.test.js`; this phase record is the only documentation change. Public
     styles and assets, `robots.txt`, packages, deployment configuration, D1 migrations, payment and
     provider behavior, and every external service remain unchanged.
+- [x] Commit and push the verified release, deploy that exact source to the production custom
+  domain, and smoke-test its search surfaces without opening checkout or creating a payment.
+  - Source commit `f917c73` is on `origin/main`. Worker version
+    `6196cc70-f1ed-4f00-ada6-1986bdc89d76` receives 100% of production traffic; version
+    `384b4c55-3fc2-4603-a4c5-e28687c9d704` is the immediate rollback target.
+  - Live `/`, `/campaigns/st-jude`, `/about`, `/sitemap.xml`, `/submit`, `/health`, and
+    `/robots.txt` return `200`. The homepage publishes its canonical URL, descriptive title and H1,
+    outbid explanation, and parseable `WebSite` JSON-LD; the campaign page, internal content, and
+    sitemap entry are live; and `robots.txt` continues to allow public crawling and name the
+    sitemap.
+  - `/submit` returns both HTML and HTTP `noindex, follow` directives without a canonical or Open
+    Graph URL. `/health` returns `noindex, nofollow, noarchive`, reports healthy with checkout
+    enabled, and the homepage retains CSP, HSTS, and `nosniff`. No checkout or payment request was
+    made.
 
 Exit: Search engines and answer engines can crawl a specific, internally linked explanation of
 Outcharity and its St. Jude campaign, while purchase and health utility URLs are excluded from
