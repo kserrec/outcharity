@@ -808,6 +808,14 @@ Verified starting state, 2026-08-30:
     enabled. The deployed favicon is SVG and its SHA-256 exactly matches the committed file at
     `82dda134fb7386db80d03f0d71dbebff321cb74d2a56104e5938bcb6fbc5a1f2`. No checkout POST or
     payment request was made.
+- [x] Derive a looping, palette-optimized `demo/outcharity-demo.gif` for easier browser and GitHub
+  viewing while preserving the MP4. Existing Chrome decoded 146 samples at 960 × 540 and 12 frames
+  per second; the existing Sharp toolchain merged identical neighboring frames into longer holds
+  and stored 108 frames without shortening the 12.17-second animation. Four sampled GIF timestamps
+  show the same homepage, leaderboard, fictional form, and unclicked payment-step sequence. The GIF
+  is 3,564,798 bytes with SHA-256
+  `e38fa4ad15561b011b719850e15f679bdf8e0255feac253cc68399ebb9a97345`, loops indefinitely, adds no
+  package, and remains outside `public/` with the MP4.
 
 Exit: The browser favicon matches the supplied Outcharity mark, the repository contains a concise
 demonstration of the existing public journey, and neither asset changes checkout or payment

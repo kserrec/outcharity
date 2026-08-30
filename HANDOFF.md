@@ -8,8 +8,10 @@ production Worker deploy, or private reconciliation of the first confirmed publi
 ## Current production deployment
 
 - `main` is the release branch and tracks `origin/main`. Asset source commit `778efd3` contains the
-  logo-matched favicon and repository-only demo video and is pushed there. Only the favicon is a
-  deployed public asset; `demo/outcharity-demo.mp4` is not under `public/` and is not published.
+  logo-matched favicon and repository-only demo MP4, and the current branch also contains its
+  palette-optimized GIF derivative. Only the favicon is a deployed public asset;
+  `demo/outcharity-demo.mp4` and `demo/outcharity-demo.gif` are not under `public/` and are not
+  published.
 - The deployed application requires a managed Turnstile proof on both checkout routes, verifies it
   server-side before D1, R2, or Stripe work, keeps an earlier per-client limiter, and consumes the
   shared checkout brake only after successful proof. Public cache misses and valid-looking private
@@ -57,7 +59,8 @@ production Worker deploy, or private reconciliation of the first confirmed publi
   pass, and native GitHub secret scanning plus push protection are enabled.
 - Production runs Worker version `3ebc3e8f-af49-4513-a201-57044a6c7ba1`. It replaced SEO version
   `6196cc70-f1ed-4f00-ada6-1986bdc89d76`, which is the immediate rollback target. Asset source
-  commit `778efd3` is on `origin/main`; the later deployment-evidence commit is documentation-only.
+  commit `778efd3` and its later GIF derivative are on `origin/main`; the deployment-evidence
+  commit is documentation-only.
 - Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. Missing proof on both checkout
   routes returns 403 before downstream work. A fresh real-browser proof reaches application
   validation with 422, and immediate replay of that proof is rejected with 403. The homepage now
@@ -88,9 +91,9 @@ production Worker deploy, or private reconciliation of the first confirmed publi
   `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; the exact CI command scans
   full Git history while explicitly excluding every dotenv pattern and reports no leak.
 - Current asset-release live checks pass for health, homepage, `/submit`, and the deployed favicon;
-  the favicon bytes exactly match source, and the MP4 remains repository-only. The preceding safe
-  missing-proof POST probes returned 403, and the public/private CSP variants both allow Turnstile
-  while private pages continue to exclude analytics.
+  the favicon bytes exactly match source, and both demo formats remain repository-only. The
+  preceding safe missing-proof POST probes returned 403, and the public/private CSP variants both
+  allow Turnstile while private pages continue to exclude analytics.
 - Live zone checks prove URL-encoded checkout paths reach the same protected application routes.
   The active WAF rule permits five matching requests from one IP in ten seconds and stops the next
   two at Cloudflare with HTTP 429 before Worker execution; normal responses resume after the
@@ -142,7 +145,7 @@ production Worker deploy, or private reconciliation of the first confirmed publi
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch and upstream: `main` tracking `origin/main`
 - The deployed Phase 16 favicon source and its verification evidence are committed and pushed to
-  `origin/main`; the demo MP4 is committed there but is not deployed.
+  `origin/main`; the demo MP4 and GIF are committed there but are not deployed.
 - Generated `graphify-out/` data remains local and is ignored; it is not part of the repository.
 - Public release: `https://github.com/kserrec/outcharity/releases/tag/v0.1.0`
 - The old draft pull request is merged and is no longer the release path. New finished work goes to
