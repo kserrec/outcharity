@@ -1,30 +1,32 @@
 # Outcharity session handoff
 
-This handoff is current through the production deployment, edge-rule and billing hardening, and
-real-browser Turnstile validation of Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9` on
-2026-08-24. It becomes stale on the next runtime-affecting commit, production Worker deploy, or
-private reconciliation of the first confirmed public listing.
+This handoff is current through the logo-matched favicon production deployment of Worker version
+`3ebc3e8f-af49-4513-a201-57044a6c7ba1` on 2026-08-30, including the earlier edge-rule, billing,
+Turnstile, statistics, and search hardening. It becomes stale on the next runtime-affecting commit,
+production Worker deploy, or private reconciliation of the first confirmed public listing.
 
 ## Current production deployment
 
-- `main` is the release branch and tracks `origin/main`. The reviewed Turnstile and
-  denial-of-wallet source and its verification record are committed there and match the deployed
-  production behavior.
+- `main` is the release branch and tracks `origin/main`. Asset source commit `778efd3` contains the
+  logo-matched favicon and repository-only demo video and is pushed there. Only the favicon is a
+  deployed public asset; `demo/outcharity-demo.mp4` is not under `public/` and is not published.
 - The deployed application requires a managed Turnstile proof on both checkout routes, verifies it
   server-side before D1, R2, or Stripe work, keeps an earlier per-client limiter, and consumes the
   shared checkout brake only after successful proof. Public cache misses and valid-looking private
   reads share a separate aggregate lookup brake.
-- All 93 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
-  4.125.0 build passes with `/dev/null` as its environment file. The dry-run upload is 855.31 KiB
-  raw and 122.89 KiB compressed. A fresh final cold review found no remaining proven finding.
-- Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9` receives 100% of production traffic.
-  Secret-change version `fcb9abe6-e201-469d-8d4b-31b9b258cf38` is the immediate rollback target;
-  it contains the preceding runtime plus the encrypted Turnstile secret. Wrangler retained the
-  custom domain and 15-minute schedule and loaded no dotenv file.
-- Live `/health` returns 200 with checkout enabled. `/submit` contains the approved public site key,
-  Turnstile script, and `new_checkout` action. Both checkout POST routes return 403 when proof is
-  missing; the required script/frame CSP and responsive widget CSS are live; homepage and `/stats`
-  retain their five-second cache policy. These probes created no payment or private record.
+- All 99 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
+  4.125.0 build passes with `/dev/null` as its environment file. The upload is 863.67 KiB raw and
+  124.87 KiB compressed; the deployed Worker reports a 12 ms startup time.
+- Worker version `3ebc3e8f-af49-4513-a201-57044a6c7ba1` receives 100% of production traffic.
+  Preceding SEO version `6196cc70-f1ed-4f00-ada6-1986bdc89d76` is the immediate rollback target.
+  Wrangler retained the custom domain and 15-minute schedule and loaded no dotenv file.
+- Live `/`, `/submit`, `/health`, and `/favicon.svg` return 200. Health reports checkout enabled,
+  and the live favicon exactly matches the committed SHA-256
+  `82dda134fb7386db80d03f0d71dbebff321cb74d2a56104e5938bcb6fbc5a1f2`. `/submit` contains the
+  approved public site key, Turnstile script, and `new_checkout` action. Both checkout POST routes
+  return 403 when proof is missing; the required script/frame CSP and responsive widget CSS are
+  live; homepage and `/stats` retain their five-second cache policy. These probes created no
+  payment or private record.
 - A normal browser produced a fresh production token on `/submit`. An intentionally incomplete
   checkout request using it returned application validation status 422, while immediately replaying
   that identical token returned the application's Turnstile rejection status 403. This proves the
@@ -53,10 +55,9 @@ private reconciliation of the first confirmed public listing.
   inert Stripe-shaped test fixtures added in historical commit `d63d4cf`; it does not weaken any
   detection rule or exclude any source path. GitHub Security runs `32593742789` and `32594745669`
   pass, and native GitHub secret scanning plus push protection are enabled.
-- Production runs Worker version `948c2a32-d318-47de-bff3-8d16f727e0d9`. It replaced secret-change
-  version `fcb9abe6-e201-469d-8d4b-31b9b258cf38`, which is the immediate rollback target. The
-  deployed Turnstile/application hardening source and current verification evidence are committed
-  on `main`; `origin/main` is the recovery source.
+- Production runs Worker version `3ebc3e8f-af49-4513-a201-57044a6c7ba1`. It replaced SEO version
+  `6196cc70-f1ed-4f00-ada6-1986bdc89d76`, which is the immediate rollback target. Asset source
+  commit `778efd3` is on `origin/main`; the later deployment-evidence commit is documentation-only.
 - Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. Missing proof on both checkout
   routes returns 403 before downstream work. A fresh real-browser proof reaches application
   validation with 422, and immediate replay of that proof is rejected with 403. The homepage now
@@ -75,9 +76,9 @@ private reconciliation of the first confirmed public listing.
 
 ## Release verification
 
-- All 93 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
+- All 99 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
   4.125.0 dry build passes while explicitly using `/dev/null` as its environment file. The Worker
-  upload is 855.31 KiB raw and 122.89 KiB compressed, with a 6 ms startup time.
+  upload is 863.67 KiB raw and 124.87 KiB compressed, with a 12 ms startup time.
 - This deployment adds no migration. Wrangler deployed the Worker to the `outcharity.com` custom
   domain and retained the 15-minute scheduled trigger. Version inspection shows all five encrypted
   secret binding names, including `TURNSTILE_SECRET`, without exposing their values.
@@ -86,9 +87,10 @@ private reconciliation of the first confirmed public listing.
 - The checksum-pinned Gitleaks 8.30.1 archive matches SHA-256
   `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; the exact CI command scans
   full Git history while explicitly excluding every dotenv pattern and reports no leak.
-- Live checks after this deployment pass for health, homepage, `/stats`, `/submit`, and the deployed
-  stylesheet. The two safe missing-proof POST probes return 403, and the public/private CSP variants
-  both allow Turnstile while private pages continue to exclude analytics.
+- Current asset-release live checks pass for health, homepage, `/submit`, and the deployed favicon;
+  the favicon bytes exactly match source, and the MP4 remains repository-only. The preceding safe
+  missing-proof POST probes returned 403, and the public/private CSP variants both allow Turnstile
+  while private pages continue to exclude analytics.
 - Live zone checks prove URL-encoded checkout paths reach the same protected application routes.
   The active WAF rule permits five matching requests from one IP in ten seconds and stops the next
   two at Cloudflare with HTTP 429 before Worker execution; normal responses resume after the
@@ -139,8 +141,8 @@ private reconciliation of the first confirmed public listing.
 
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch and upstream: `main` tracking `origin/main`
-- The deployed Phase 11 application hardening and its verification evidence are committed and
-  pushed to `origin/main`.
+- The deployed Phase 16 favicon source and its verification evidence are committed and pushed to
+  `origin/main`; the demo MP4 is committed there but is not deployed.
 - Generated `graphify-out/` data remains local and is ignored; it is not part of the repository.
 - Public release: `https://github.com/kserrec/outcharity/releases/tag/v0.1.0`
 - The old draft pull request is merged and is no longer the release path. New finished work goes to

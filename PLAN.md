@@ -796,6 +796,18 @@ Verified starting state, 2026-08-30:
   `baa756e6a00ef220a661d437d6d26c449a6ffb0f71753046135b3f19f71eaabc`.
   No executable, test, package, migration, stylesheet, deployment-configuration, or provider change
   is included.
+- [x] Commit and push the exact asset release, deploy it with Wrangler's strict remote-change
+  check, and verify the live favicon without opening checkout or creating a payment.
+  - Source commit `778efd3` is on `origin/main`. Worker version
+    `3ebc3e8f-af49-4513-a201-57044a6c7ba1` receives 100% of production traffic; preceding SEO
+    version `6196cc70-f1ed-4f00-ada6-1986bdc89d76` is the immediate rollback target.
+  - Wrangler read seven files from `public/` and uploaded only the changed `/favicon.svg`. The
+    repository-only MP4 remains outside `public/` and was not published. The custom domain and
+    15-minute schedule remain attached.
+  - Live `/`, `/submit`, `/health`, and `/favicon.svg` return `200`; health reports checkout
+    enabled. The deployed favicon is SVG and its SHA-256 exactly matches the committed file at
+    `82dda134fb7386db80d03f0d71dbebff321cb74d2a56104e5938bcb6fbc5a1f2`. No checkout POST or
+    payment request was made.
 
 Exit: The browser favicon matches the supplied Outcharity mark, the repository contains a concise
 demonstration of the existing public journey, and neither asset changes checkout or payment
