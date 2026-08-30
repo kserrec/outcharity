@@ -768,3 +768,35 @@ Verified starting state, 2026-08-27:
 Exit: Search engines and answer engines can crawl a specific, internally linked explanation of
 Outcharity and its St. Jude campaign, while purchase and health utility URLs are excluded from
 results and every public claim remains bounded by the product's recorded evidence.
+
+## Phase 16 — Logo-matched favicon and demo video
+
+Verified starting state, 2026-08-30:
+
+- Every rendered page already referenced the existing `public/favicon.svg`. That file contained a
+  dark-teal square, pink “O,” and gold upward arrow rather than the supplied Outcharity logo's cream
+  rounded tile, dark-teal “O,” and coral heart. The HTML reference itself was current and required
+  no change.
+- No demo video existed. The approved video scope was a short, silent walkthrough of the live
+  homepage, leaderboard, and new-listing contribution form that stopped before any form submission
+  or payment action.
+- The unchanged baseline passed all 99 tests and the worktree was clean at commit `7067af0` before
+  these two asset changes began.
+
+- [x] Replace only the existing favicon artwork with a compact SVG adaptation of the supplied logo.
+  Preserve the existing `/favicon.svg` reference and simplify gradients and shadows so the “O” and
+  heart remain legible at 16, 32, 64, and 128 pixels.
+- [x] Create `demo/outcharity-demo.mp4` as a repository-only review artifact, not a deployed public
+  asset. Use screenshots of the public homepage and prefilled `$7` contribution form, clearly
+  fictional form text, and no checkout POST or payment request.
+- [x] Verify the assets and release boundary before committing. The favicon renders cleanly at all
+  four target sizes. Chrome decodes the silent MP4 at 1280 × 720 for 12.16 seconds and four sampled
+  timestamps show the homepage, leaderboard, fictional form entry, and full unclicked payment
+  button. The video is 1,629,144 bytes with SHA-256
+  `baa756e6a00ef220a661d437d6d26c449a6ffb0f71753046135b3f19f71eaabc`.
+  No executable, test, package, migration, stylesheet, deployment-configuration, or provider change
+  is included.
+
+Exit: The browser favicon matches the supplied Outcharity mark, the repository contains a concise
+demonstration of the existing public journey, and neither asset changes checkout or payment
+behavior.
