@@ -395,7 +395,7 @@ export function statsPage(config, stats) {
       statCard(
         'Website visits',
         formatCount(stats.visitCount),
-        'Entries from a direct link or another site—not unique people. Cloudflare excludes bots; European visits are not collected.',
+        "Cloudflare's bot-filtered estimate of entries from a direct link or another site—not unique people. Completed UTC days are refreshed; Outcharity keeps the highest estimate for each day, and European visits are not collected.",
       ),
     );
   }

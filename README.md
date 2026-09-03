@@ -30,10 +30,12 @@ delivery because its payment was refunded or disputed. Provider acceptance does 
 Outcharity independently observed the charity's bank receipt. No individual payment or provider
 identifier is published.
 
-A visit is an entry from a direct link or another website, not a unique person or every page view.
-Cloudflare excludes bots, and the configured automatic injection does not collect European visits.
-Outcharity stores only daily aggregate totals—never an individual visit, IP address, browser detail,
-or tracking identifier.
+A visit is Cloudflare's bot-filtered estimate of an entry from a direct link or another website, not
+a unique person or every page view. The configured automatic injection does not collect European
+visits. Outcharity refreshes only the six most recent completed UTC days and retains the highest
+estimate recorded for each day, so a later sampled estimate or omitted row cannot lower the public
+lifetime total. It stores only daily aggregate totals—never an individual visit, IP address, browser
+detail, or tracking identifier.
 
 The server-rendered `/help` page gives visitors useful paths even when they do not want a
 leaderboard listing: the featured charity's official donation page, GiveWell research and pooled
@@ -84,8 +86,9 @@ has read-only Account Analytics permission and is likewise stored only as a Work
 
 Cloudflare Workers Logs supplies error monitoring. Cloudflare Web Analytics is enabled through
 automatic injection for non-EU visitors, without adding an analytics package to the application.
-The existing 15-minute scheduled event refreshes the stored daily aggregates at most about once an
-hour; analytics failures are logged without interrupting charity delivery or replacing the last
+The existing 15-minute scheduled event refreshes the six most recent completed UTC-day aggregates
+at most about once an hour. A daily aggregate can increase but cannot be replaced by a lower later
+estimate; analytics failures are logged without interrupting charity delivery or replacing the last
 successful count.
 
 Wrangler publishes only the `outcharity.com` custom domain; public `workers.dev` and preview URLs

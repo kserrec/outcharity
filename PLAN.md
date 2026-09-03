@@ -820,3 +820,48 @@ Verified starting state, 2026-08-30:
 Exit: The browser favicon matches the supplied Outcharity mark, the repository contains a concise
 demonstration of the existing public journey, and neither asset changes checkout or payment
 behavior.
+
+## Phase 17 — Stable public website-visit total
+
+Verified starting state, 2026-09-03:
+
+- Production D1 contained fourteen daily rows from 2026-08-21 through 2026-09-03 summing to 835,
+  and both the live homepage and `/stats` rendered 835. The previous day's value above 1,000 was no
+  longer present in D1, so its exact prior daily composition was not recoverable from the
+  application database.
+- The analytics query used Cloudflare's adaptive Web Analytics GraphQL dataset. Every refresh
+  requested the current partial UTC day plus seven earlier days, filled every omitted day with
+  zero, and unconditionally replaced the stored value for each requested day. A later lower sampled
+  estimate or omitted result therefore lowered the public lifetime sum.
+- The browser received no client-side counter code or stored count. Homepage and `/stats` responses
+  revalidated through independent five-second Cloudflare Cache API entries, which can briefly differ
+  between locations but cannot explain a value remaining lower from one day to the next.
+
+- [x] Reproduce the destructive refresh against the unchanged implementation: a second response
+  with two lower estimates and one omitted row replaced previously stored counts and reduced the
+  public total. Also prove that the query included the current partial day and reached outside the
+  intended six completed-day window.
+- [x] Store the largest observed count for each UTC day, so later lower estimates and omitted rows
+  cannot lower either the homepage or `/stats` total. Keep the successful-sync timestamp monotonic
+  if scheduled work overlaps.
+- [x] Refresh only the six most recent completed UTC days, wholly inside Cloudflare's seven-day
+  full-data retention window, and continue revisiting them so legitimate additions can raise their
+  stored counts.
+- [x] Explain on `/stats` and in repository documentation that the number is a bot-filtered estimate,
+  not unique people; completed days are refreshed; and Outcharity retains each day's highest
+  estimate. Preserve the existing collection scope and five-second public-page cache.
+- [x] Run the focused regression, full test suite, syntax check, dotenv-isolated dry build, and diff
+  checks. Confirm there is no package, migration, secret, analytics-collection, payment, or charity
+  behavior change.
+  - The focused analytics and rendering run passes all 38 tests. The full suite passes all 101
+    tests; `npm run check`, `git diff --check`, and the Wrangler 4.125.0 dry build with `/dev/null`
+    as its environment file also pass. The dry bundle is 863.93 KiB raw and 124.94 KiB compressed
+  - The release changes two analytics query bounds, two conflict-update expressions, the Website
+    visits explanation, and regression/documentation coverage. It adds no package, migration,
+    secret, analytics collection, data store, payment behavior, or charity-delivery behavior
+- [ ] Commit and push the correction, deploy it with Wrangler's strict remote-change check, then
+  verify the live count, health response, scheduled refresh, and production D1 high-water behavior.
+
+Exit: Freshly revalidated devices read one lifetime visit total whose stored daily components can
+rise as completed analytics data arrives but cannot be revised downward by Cloudflare sampling or
+an omitted GraphQL row.

@@ -20,7 +20,7 @@ function analyticsEnvironment(db, overrides = {}) {
 test('analytics sync stores only bot-filtered daily visit totals and preserves zero days', async (context) => {
   const db = new TestD1Database();
   context.after(() => db.close());
-  const now = new Date('2026-08-24T04:00:00.000Z');
+  const now = new Date('2026-08-25T04:00:00.000Z');
   let requestBody;
 
   const result = await syncCloudflareVisits(
@@ -78,7 +78,7 @@ test('analytics sync stores only bot-filtered daily visit totals and preserves z
 test('a recent successful sync prevents another Cloudflare request', async (context) => {
   const db = new TestD1Database();
   context.after(() => db.close());
-  const firstNow = new Date('2026-08-24T04:00:00.000Z');
+  const firstNow = new Date('2026-08-25T04:00:00.000Z');
 
   await syncCloudflareVisits(
     analyticsEnvironment(db, { WEB_ANALYTICS_BASELINE_VISITS: '0' }),
@@ -90,7 +90,7 @@ test('a recent successful sync prevents another Cloudflare request', async (cont
     async () => {
       throw new Error('fresh data must not be fetched again');
     },
-    { now: new Date('2026-08-24T04:30:00.000Z') },
+    { now: new Date('2026-08-25T04:30:00.000Z') },
   );
 
   assert.deepEqual(result, { synced: false, reason: 'fresh' });
@@ -100,7 +100,7 @@ test('an analytics API failure cannot replace the last successful totals', async
   const db = new TestD1Database();
   context.after(() => db.close());
   const env = analyticsEnvironment(db);
-  const firstNow = new Date('2026-08-24T04:00:00.000Z');
+  const firstNow = new Date('2026-08-25T04:00:00.000Z');
 
   await syncCloudflareVisits(
     env,
@@ -122,7 +122,7 @@ test('an analytics API failure cannot replace the last successful totals', async
   await assert.rejects(
     syncCloudflareVisits(env, async () => new Response('denied', { status: 403 }), {
       force: true,
-      now: new Date('2026-08-24T05:00:00.000Z'),
+      now: new Date('2026-08-25T05:00:00.000Z'),
     }),
     /HTTP 403/,
   );
@@ -159,10 +159,88 @@ test('the first sync refuses data below the verified 368-visit launch baseline',
             },
           },
         }),
-      { force: true, now: new Date('2026-08-24T04:00:00.000Z') },
+      { force: true, now: new Date('2026-08-25T04:00:00.000Z') },
     ),
     /fewer visits than the verified launch baseline/,
   );
   assert.equal(await getWebAnalyticsLastSuccess(db), null);
   assert.equal((await getPublicStats(db)).visitCount, null);
+});
+
+test('later sampled estimates and omitted rows cannot lower the public visit total', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  const env = analyticsEnvironment(db, { WEB_ANALYTICS_BASELINE_VISITS: '0' });
+
+  await syncCloudflareVisits(
+    env,
+    async () =>
+      Response.json({
+        data: {
+          viewer: {
+            accounts: [
+              {
+                visits: [
+                  { dimensions: { date: '2026-08-21' }, sum: { visits: 20 } },
+                  { dimensions: { date: '2026-08-22' }, sum: { visits: 30 } },
+                  { dimensions: { date: '2026-08-23' }, sum: { visits: 40 } },
+                  { dimensions: { date: '2026-08-24' }, sum: { visits: 50 } },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    { force: true, now: new Date('2026-08-25T04:00:00.000Z') },
+  );
+
+  await syncCloudflareVisits(
+    env,
+    async () =>
+      Response.json({
+        data: {
+          viewer: {
+            accounts: [
+              {
+                visits: [
+                  { dimensions: { date: '2026-08-21' }, sum: { visits: 10 } },
+                  { dimensions: { date: '2026-08-23' }, sum: { visits: 35 } },
+                  { dimensions: { date: '2026-08-24' }, sum: { visits: 55 } },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    { force: true, now: new Date('2026-08-25T05:00:00.000Z') },
+  );
+
+  const stored = await db.prepare('SELECT day, visits FROM web_analytics_daily ORDER BY day').all();
+  assert.deepEqual(stored.results.map((row) => ({ ...row })), [
+    { day: '2026-08-21', visits: 20 },
+    { day: '2026-08-22', visits: 30 },
+    { day: '2026-08-23', visits: 40 },
+    { day: '2026-08-24', visits: 55 },
+  ]);
+  assert.equal((await getPublicStats(db)).visitCount, 145);
+  assert.equal((await getLeaderboard(db)).visitCount, 145);
+});
+
+test('analytics refreshes only the six most recent completed UTC days', async (context) => {
+  const db = new TestD1Database();
+  context.after(() => db.close());
+  let requestBody;
+
+  const result = await syncCloudflareVisits(
+    analyticsEnvironment(db, { WEB_ANALYTICS_BASELINE_VISITS: '0' }),
+    async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return Response.json({ data: { viewer: { accounts: [{ visits: [] }] } } });
+    },
+    { force: true, now: new Date('2026-09-03T23:59:59.000Z') },
+  );
+
+  assert.equal(requestBody.variables.filter.date_geq, '2026-08-28');
+  assert.equal(requestBody.variables.filter.date_leq, '2026-09-02');
+  assert.deepEqual(result, { synced: true, days: 6, visits: 0 });
 });

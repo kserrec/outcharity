@@ -230,7 +230,9 @@ export async function recordWebAnalyticsDays(db, days, fetchedAt) {
       .prepare(
         `INSERT INTO web_analytics_daily (day, visits, fetched_at)
          VALUES (?, ?, ?)
-         ON CONFLICT(day) DO UPDATE SET visits = excluded.visits, fetched_at = excluded.fetched_at`,
+         ON CONFLICT(day) DO UPDATE SET
+           visits = MAX(web_analytics_daily.visits, excluded.visits),
+           fetched_at = MAX(web_analytics_daily.fetched_at, excluded.fetched_at)`,
       )
       .bind(day, visits, fetchedAt),
   );
@@ -239,7 +241,8 @@ export async function recordWebAnalyticsDays(db, days, fetchedAt) {
       .prepare(
         `INSERT INTO web_analytics_sync (singleton, last_success_at)
          VALUES (1, ?)
-         ON CONFLICT(singleton) DO UPDATE SET last_success_at = excluded.last_success_at`,
+         ON CONFLICT(singleton) DO UPDATE SET
+           last_success_at = MAX(web_analytics_sync.last_success_at, excluded.last_success_at)`,
       )
       .bind(fetchedAt),
   );

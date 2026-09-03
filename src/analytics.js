@@ -4,7 +4,8 @@ const ANALYTICS_ENDPOINT = 'https://api.cloudflare.com/client/v4/graphql';
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const REFRESH_AFTER_MILLISECONDS = 55 * 60 * 1000;
-const REFRESH_LOOKBACK_DAYS = 7;
+// Refresh only completed days that are wholly inside Cloudflare's seven-day full-data window.
+const REFRESH_LOOKBACK_DAYS = 5;
 const REQUEST_TIMEOUT_MILLISECONDS = 10_000;
 
 const VISITS_QUERY = `query OutcharityVisits(
@@ -134,7 +135,7 @@ export async function syncCloudflareVisits(env, fetcher = fetch, { force = false
     return { synced: false, reason: 'fresh' };
   }
 
-  const endDay = utcDay(now);
+  const endDay = shiftUtcDay(utcDay(now), -1);
   const lookbackDay = shiftUtcDay(endDay, -REFRESH_LOOKBACK_DAYS);
   const startDay = config.firstDay > lookbackDay ? config.firstDay : lookbackDay;
   if (startDay > endDay) return { synced: false, reason: 'before-start' };

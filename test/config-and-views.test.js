@@ -1066,7 +1066,10 @@ test('the stats page defines campaign aggregates and an exact charity-delivery l
   assert.match(document, /Fractional cents round in the charity&#39;s favor/);
   assert.match(document, /rounded to the nearest cent/);
   assert.match(document, /not unique people/);
-  assert.match(document, /Cloudflare excludes bots; European visits are not collected/);
+  assert.match(document, /Cloudflare&#39;s bot-filtered estimate/);
+  assert.match(document, /Completed UTC days are refreshed/);
+  assert.match(document, /keeps the highest estimate for each day/);
+  assert.match(document, /European visits are not collected/);
   assert.match(document, /\$135[\s\S]*?recorded at payment confirmation across all purchases/);
   assert.match(document, /These three statuses cover every recorded charity share/);
   assert.match(document, /GoodAPI returned a donation record/);
