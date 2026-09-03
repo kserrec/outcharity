@@ -859,8 +859,19 @@ Verified starting state, 2026-09-03:
   - The release changes two analytics query bounds, two conflict-update expressions, the Website
     visits explanation, and regression/documentation coverage. It adds no package, migration,
     secret, analytics collection, data store, payment behavior, or charity-delivery behavior
-- [ ] Commit and push the correction, deploy it with Wrangler's strict remote-change check, then
+- [x] Commit and push the correction, deploy it with Wrangler's strict remote-change check, then
   verify the live count, health response, scheduled refresh, and production D1 high-water behavior.
+  - Runtime source commit `ebeac21` is on `origin/main`. Worker version
+    `3a35a288-4c3f-436d-9a31-141610a180db` receives 100% of production traffic; version
+    `3ebc3e8f-af49-4513-a201-57044a6c7ba1` is the immediate rollback target. Wrangler retained the
+    custom domain and 15-minute schedule and uploaded no asset
+  - The first live scheduled event completed on the new version with no exception. It refreshed
+    only completed days 2026-08-28 through 2026-09-02; the existing partial 2026-09-03 row remained
+    untouched. No stored day fell, the D1 sum rose from 835 to 1,000, and `last_success_at` advanced
+    to `2026-09-03T13:45:25.134Z`
+  - Fresh live homepage and `/stats` responses both render 1,000, `/stats` includes the high-water
+    explanation, and `/health` returns healthy with checkout enabled. These probes and read-only D1
+    comparisons created no payment, charity-delivery, visitor, or database record
 
 Exit: Freshly revalidated devices read one lifetime visit total whose stored daily components can
 rise as completed analytics data arrives but cannot be revised downward by Cloudflare sampling or

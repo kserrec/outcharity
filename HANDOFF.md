@@ -1,29 +1,31 @@
 # Outcharity session handoff
 
-This handoff is current through the logo-matched favicon production deployment of Worker version
-`3ebc3e8f-af49-4513-a201-57044a6c7ba1` on 2026-08-30, including the earlier edge-rule, billing,
-Turnstile, statistics, and search hardening. It becomes stale on the next runtime-affecting commit,
-production Worker deploy, or private reconciliation of the first confirmed public listing.
+This handoff is current through the stable website-visit-total production deployment of Worker
+version `3a35a288-4c3f-436d-9a31-141610a180db` on 2026-09-03, including the earlier asset,
+edge-rule, billing, Turnstile, statistics, and search hardening. It becomes stale on the next
+runtime-affecting commit, production Worker deploy, or private reconciliation of the first confirmed
+public listing.
 
 ## Current production deployment
 
-- `main` is the release branch and tracks `origin/main`. Asset source commit `778efd3` contains the
-  logo-matched favicon and repository-only demo MP4, and the current branch also contains its
-  palette-optimized GIF derivative. Only the favicon is a deployed public asset;
-  `demo/outcharity-demo.mp4` and `demo/outcharity-demo.gif` are not under `public/` and are not
-  published.
+- `main` is the release branch and tracks `origin/main`. Runtime source commit `ebeac21` makes the
+  public lifetime visit count nondecreasing and limits refreshes to six completed UTC days. The
+  earlier logo-matched favicon remains public; `demo/outcharity-demo.mp4` and
+  `demo/outcharity-demo.gif` remain outside `public/` and are not published.
 - The deployed application requires a managed Turnstile proof on both checkout routes, verifies it
   server-side before D1, R2, or Stripe work, keeps an earlier per-client limiter, and consumes the
   shared checkout brake only after successful proof. Public cache misses and valid-looking private
   reads share a separate aggregate lookup brake.
-- All 99 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
-  4.125.0 build passes with `/dev/null` as its environment file. The upload is 863.67 KiB raw and
-  124.87 KiB compressed; the deployed Worker reports a 12 ms startup time.
-- Worker version `3ebc3e8f-af49-4513-a201-57044a6c7ba1` receives 100% of production traffic.
-  Preceding SEO version `6196cc70-f1ed-4f00-ada6-1986bdc89d76` is the immediate rollback target.
+- All 101 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
+  4.125.0 build passes with `/dev/null` as its environment file. The upload is 863.93 KiB raw and
+  124.94 KiB compressed; the deployed Worker reports a 7 ms startup time.
+- Worker version `3a35a288-4c3f-436d-9a31-141610a180db` receives 100% of production traffic.
+  Preceding favicon version `3ebc3e8f-af49-4513-a201-57044a6c7ba1` is the immediate rollback target.
   Wrangler retained the custom domain and 15-minute schedule and loaded no dotenv file.
-- Live `/`, `/submit`, `/health`, and `/favicon.svg` return 200. Health reports checkout enabled,
-  and the live favicon exactly matches the committed SHA-256
+- Live `/`, `/stats`, and `/health` return 200. Health reports checkout enabled, both public data
+  pages render 1,000 website visits, and `/stats` explains that Outcharity keeps the highest
+  Cloudflare estimate for each completed UTC day. The live favicon still exactly matches the
+  committed SHA-256
   `82dda134fb7386db80d03f0d71dbebff321cb74d2a56104e5938bcb6fbc5a1f2`. `/submit` contains the
   approved public site key, Turnstile script, and `new_checkout` action. Both checkout POST routes
   return 403 when proof is missing; the required script/frame CSP and responsive widget CSS are
@@ -57,43 +59,50 @@ production Worker deploy, or private reconciliation of the first confirmed publi
   inert Stripe-shaped test fixtures added in historical commit `d63d4cf`; it does not weaken any
   detection rule or exclude any source path. GitHub Security runs `32593742789` and `32594745669`
   pass, and native GitHub secret scanning plus push protection are enabled.
-- Production runs Worker version `3ebc3e8f-af49-4513-a201-57044a6c7ba1`. It replaced SEO version
-  `6196cc70-f1ed-4f00-ada6-1986bdc89d76`, which is the immediate rollback target. Asset source
-  commit `778efd3` and its later GIF derivative are on `origin/main`; the deployment-evidence
-  commit is documentation-only.
+- Production runs Worker version `3a35a288-4c3f-436d-9a31-141610a180db`. It replaced favicon
+  version `3ebc3e8f-af49-4513-a201-57044a6c7ba1`, which is the immediate rollback target. Runtime
+  source commit `ebeac21`, the earlier asset source, and both repository-only demo formats are on
+  `origin/main`.
 - Live `/health` returns `{"ok":true,"checkoutEnabled":true}`. Missing proof on both checkout
   routes returns 403 before downstream work. A fresh real-browser proof reaches application
   validation with 422, and immediate replay of that proof is rejected with 403. The homepage now
-  shows a confirmed
-  four-entry leaderboard and links to Stats from the primary navigation, campaign panel, and footer.
+  shows a confirmed seven-entry leaderboard and links to Stats from the primary navigation,
+  campaign panel, and footer.
   `/stats` returns six aggregate cards, its canonical URL is correct, the sitemap includes it, and
   the deployed mobile stylesheet gives each leaderboard entry and stats card its own row. Homepage
-  totals and `/stats` now count only eligible payments from the four advertisers currently on the
-  board: `$7` paid and `$6.30` allocated to charity. The hidden founder `$100` contribution no longer
-  affects those public numbers; its matching Stripe event, D1 rows, charity hold state, and eventual
-  GoodAPI record have not been privately reconciled.
-- The sixth card reported 444 Website visits at the preceding `54cd151` smoke test. This is an
-  aggregate entry count rather than unique people or page views; bots are excluded, and European
-  visits are absent because the existing automatic-injection setup does not collect them. D1
-  retains only daily counts and fetch timestamps.
+  totals and `/stats` count only eligible payments from the seven advertisers currently on the
+  board: `$19` paid and `$17.40` allocated to charity. The hidden founder `$100` contribution no
+  longer affects those public numbers; its matching Stripe event, D1 rows, charity hold state, and
+  eventual GoodAPI record have not been privately reconciled.
+- The sixth card reports 1,000 Website visits after the first scheduled refresh on the corrected
+  Worker. This is Cloudflare's bot-filtered estimate of entries rather than unique people or page
+  views; European visits are absent because the existing automatic-injection setup does not collect
+  them. D1 retains only daily counts and fetch timestamps, keeps each completed day's highest
+  estimate, and never stores visitor-level data.
 
 ## Release verification
 
-- All 99 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
+- All 101 tests pass, `node --check src/index.js` passes, `git diff --check` passes, and the Wrangler
   4.125.0 dry build passes while explicitly using `/dev/null` as its environment file. The Worker
-  upload is 863.67 KiB raw and 124.87 KiB compressed, with a 12 ms startup time.
+  upload is 863.93 KiB raw and 124.94 KiB compressed, with a 7 ms startup time.
 - This deployment adds no migration. Wrangler deployed the Worker to the `outcharity.com` custom
-  domain and retained the 15-minute scheduled trigger. Version inspection shows all five encrypted
-  secret binding names, including `TURNSTILE_SECRET`, without exposing their values.
+  domain, retained the 15-minute scheduled trigger, and uploaded no asset. Version inspection shows
+  all five encrypted secret binding names, including `TURNSTILE_SECRET`, without exposing their
+  values.
+- The first scheduled event on the new version completed successfully with no exception. It
+  refreshed completed UTC days 2026-08-28 through 2026-09-02, left the existing partial 2026-09-03
+  row untouched, raised the stored total from 835 to 1,000 without lowering any day, and advanced
+  the sync timestamp to `2026-09-03T13:45:25.134Z`.
 - `npm audit` and `npm audit --omit=dev` both report zero vulnerabilities. GitHub Dependabot has
   zero open alerts and automatic security updates remain enabled.
 - The checksum-pinned Gitleaks 8.30.1 archive matches SHA-256
   `551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`; the exact CI command scans
   full Git history while explicitly excluding every dotenv pattern and reports no leak.
-- Current asset-release live checks pass for health, homepage, `/submit`, and the deployed favicon;
-  the favicon bytes exactly match source, and both demo formats remain repository-only. The
-  preceding safe missing-proof POST probes returned 403, and the public/private CSP variants both
-  allow Turnstile while private pages continue to exclude analytics.
+- Current release live checks pass for health, homepage, `/stats`, and the deployed favicon; both
+  public data pages render 1,000 visits, the favicon bytes exactly match source, and both demo
+  formats remain repository-only. The preceding safe missing-proof POST probes returned 403, and
+  the public/private CSP variants both allow Turnstile while private pages continue to exclude
+  analytics.
 - Live zone checks prove URL-encoded checkout paths reach the same protected application routes.
   The active WAF rule permits five matching requests from one IP in ten seconds and stops the next
   two at Cloudflare with HTTP 429 before Worker execution; normal responses resume after the
@@ -144,8 +153,9 @@ production Worker deploy, or private reconciliation of the first confirmed publi
 
 - Repository: `/home/serrecchia/Projects/outcharity`
 - Branch and upstream: `main` tracking `origin/main`
-- The deployed Phase 16 favicon source and its verification evidence are committed and pushed to
-  `origin/main`; the demo MP4 and GIF are committed there but are not deployed.
+- Runtime source commit `ebeac21` for the deployed stable visit total is committed and pushed to
+  `origin/main`; the earlier favicon, demo MP4, and demo GIF are also committed there, while both
+  demo formats remain undeployed.
 - Generated `graphify-out/` data remains local and is ignored; it is not part of the repository.
 - Public release: `https://github.com/kserrec/outcharity/releases/tag/v0.1.0`
 - The old draft pull request is merged and is no longer the release path. New finished work goes to
