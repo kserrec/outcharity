@@ -24,7 +24,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "hono": "4.13.3",
+    "hono": "4.13.5",
     "stripe": "22.5.0"
   },
   "devDependencies": {
