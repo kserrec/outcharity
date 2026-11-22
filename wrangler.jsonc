@@ -52,7 +52,7 @@
     "crons": ["*/15 * * * *"]
   },
   "vars": {
-    "OUTCHARITY_LAUNCH_APPROVED": "true",
+    "OUTCHARITY_LAUNCH_APPROVED": "false",
     "SITE_URL": "https://outcharity.com",
     "CLOUDFLARE_ACCOUNT_ID": "82901762bf678507dc432f37e1bcb440",
     "WEB_ANALYTICS_START_DATE": "2026-08-21",
